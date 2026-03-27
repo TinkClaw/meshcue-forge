@@ -423,14 +423,16 @@
   <div class="container">
     <div class="forge-box" id="forgeBox">
       <div class="forge-input-area">
-        <textarea class="forge-input" id="forgeInput" rows="1" placeholder="Describe your hardware... e.g. ESP32 board with OLED, 3 LEDs, and a buzzer"></textarea>
+        <textarea class="forge-input" id="forgeInput" rows="1" placeholder="Describe what you want to build... e.g. talking mouse toy, smart doorbell, pet feeder"></textarea>
         <button class="forge-btn" id="forgeBtn" onclick="forge()">Forge</button>
       </div>
       <div class="forge-examples">
-        <span class="example-chip" onclick="setExample(this)">ESP32-S3 with OLED + 3 LEDs + buzzer</span>
-        <span class="example-chip" onclick="setExample(this)">Arduino Nano weather station with DHT22</span>
-        <span class="example-chip" onclick="setExample(this)">RP2040 motor controller with 2 buttons</span>
-        <span class="example-chip" onclick="setExample(this)">Mesh networking node with status display</span>
+        <span class="example-chip" onclick="setExample(this)">Talking mouse toy</span>
+        <span class="example-chip" onclick="setExample(this)">Smart doorbell with motion detection</span>
+        <span class="example-chip" onclick="setExample(this)">Automatic pet feeder</span>
+        <span class="example-chip" onclick="setExample(this)">Plant moisture monitor</span>
+        <span class="example-chip" onclick="setExample(this)">Robot car with obstacle avoidance</span>
+        <span class="example-chip" onclick="setExample(this)">Simon memory game</span>
       </div>
       <div class="forge-progress" id="forgeProgress">
         <div class="progress-step" id="step-parse"><span class="step-icon">&#9881;</span><span class="step-label">Parsing description...</span><span class="step-time"></span></div>
@@ -616,21 +618,192 @@
 
 <script>
 // ── Forge Engine (client-side) ──────────────
-const TEMPLATES={led:{pins:[{id:"anode",mode:"digital-out"},{id:"cathode",mode:"ground"}],cutout:"led-hole"},button:{pins:[{id:"sig",mode:"digital-in"},{id:"gnd",mode:"ground"}],cutout:"button-cap"},oled:{pins:[{id:"sda",mode:"i2c-sda"},{id:"scl",mode:"i2c-scl"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}],cutout:"oled-window"},buzzer:{pins:[{id:"sig",mode:"pwm"},{id:"gnd",mode:"ground"}]},sensor:{pins:[{id:"data",mode:"digital-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]}};
+const TEMPLATES={led:{pins:[{id:"anode",mode:"digital-out"},{id:"cathode",mode:"ground"}],cutout:"led-hole"},button:{pins:[{id:"sig",mode:"digital-in"},{id:"gnd",mode:"ground"}],cutout:"button-cap"},oled:{pins:[{id:"sda",mode:"i2c-sda"},{id:"scl",mode:"i2c-scl"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}],cutout:"oled-window"},buzzer:{pins:[{id:"sig",mode:"pwm"},{id:"gnd",mode:"ground"}]},sensor:{pins:[{id:"data",mode:"digital-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},speaker:{pins:[{id:"sig",mode:"pwm"},{id:"gnd",mode:"ground"}],cutout:"speaker-grille"},microphone:{pins:[{id:"data",mode:"analog-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}],cutout:"mic-hole"},servo:{pins:[{id:"sig",mode:"pwm"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},motor:{pins:[{id:"in1",mode:"digital-out"},{id:"in2",mode:"digital-out"},{id:"gnd",mode:"ground"}]},relay:{pins:[{id:"sig",mode:"digital-out"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},ir_receiver:{pins:[{id:"data",mode:"digital-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},ir_emitter:{pins:[{id:"sig",mode:"digital-out"},{id:"gnd",mode:"ground"}]},neopixel:{pins:[{id:"data",mode:"digital-out"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},ultrasonic:{pins:[{id:"trig",mode:"digital-out"},{id:"echo",mode:"digital-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},pir:{pins:[{id:"data",mode:"digital-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},ldr:{pins:[{id:"data",mode:"analog-in"},{id:"gnd",mode:"ground"}]},gps:{pins:[{id:"tx",mode:"uart-tx"},{id:"rx",mode:"uart-rx"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},rfid:{pins:[{id:"sda",mode:"i2c-sda"},{id:"scl",mode:"i2c-scl"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},potentiometer:{pins:[{id:"wiper",mode:"analog-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},moisture:{pins:[{id:"data",mode:"analog-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]},gas_sensor:{pins:[{id:"data",mode:"analog-in"},{id:"vcc",mode:"power"},{id:"gnd",mode:"ground"}]}};
 const MCU_MAP={"esp32-s3":{model:"ESP32-S3-DevKitC-1",flash:8192,ram:512,wireless:["wifi","ble"]},"esp32":{model:"ESP32-DevKitC-V4",flash:4096,ram:520,wireless:["wifi","bluetooth"]},"arduino-uno":{model:"Arduino Uno R3",flash:32,ram:2,wireless:[]},"arduino-nano":{model:"Arduino Nano",flash:32,ram:2,wireless:[]},"rp2040":{model:"Raspberry Pi Pico",flash:2048,ram:264,wireless:[]}};
 const GPIO_POOLS={"esp32-s3":[1,2,3,4,5,6,7,10,11,12,13,14,15,16,17,18,21,35,36,37,38],"esp32":[2,4,5,12,13,14,15,16,17,18,19,23,25,26,27,32,33],"arduino-uno":[2,3,4,5,6,7,8,9,10,11,12,13],"arduino-nano":[2,3,4,5,6,7,8,9,10,11,12,13],"rp2040":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]};
 const I2C={"esp32-s3":{sda:8,scl:9},"esp32":{sda:21,scl:22},"arduino-uno":{sda:18,scl:19},"arduino-nano":{sda:18,scl:19},"rp2040":{sda:4,scl:5}};
+
+// ── Product Intelligence Layer ──────────────
+// Maps real-world product concepts → hardware component sets
+const PRODUCT_ARCHETYPES={
+  // Toys & Gadgets
+  "talking mouse":{mcu:"esp32-s3",components:[{id:"speaker",type:"speaker"},{id:"microphone",type:"microphone"},{id:"btn_talk",type:"button"},{id:"led_status",type:"led",color:"blue"},{id:"led_eyes",type:"neopixel"}],power:"battery",enclosure:"snap-fit",keywords:["talking","mouse","toy","plush","stuffed"]},
+  "talking toy":{mcu:"esp32-s3",components:[{id:"speaker",type:"speaker"},{id:"microphone",type:"microphone"},{id:"btn_talk",type:"button"},{id:"led_status",type:"led",color:"blue"}],power:"battery",keywords:["talking","toy","interactive","voice"]},
+  "robot car":{mcu:"esp32",components:[{id:"motor_left",type:"motor"},{id:"motor_right",type:"motor"},{id:"ultrasonic",type:"ultrasonic"},{id:"led_front",type:"led",color:"white"},{id:"led_rear",type:"led",color:"red"},{id:"buzzer",type:"buzzer"},{id:"ir_receiver",type:"ir_receiver"}],power:"battery",keywords:["robot","car","rover","vehicle","drive"]},
+  "drone":{mcu:"esp32-s3",components:[{id:"motor_fl",type:"motor"},{id:"motor_fr",type:"motor"},{id:"motor_bl",type:"motor"},{id:"motor_br",type:"motor"},{id:"sensor_imu",type:"sensor"},{id:"led_status",type:"led",color:"green"},{id:"buzzer",type:"buzzer"}],power:"battery",keywords:["drone","quadcopter","flying","uav"]},
+
+  // Smart Home
+  "smart doorbell":{mcu:"esp32-s3",components:[{id:"btn_ring",type:"button"},{id:"buzzer",type:"buzzer"},{id:"microphone",type:"microphone"},{id:"speaker",type:"speaker"},{id:"led_status",type:"neopixel"},{id:"pir",type:"pir"}],power:"usb",keywords:["doorbell","door","bell","ring","visitor"]},
+  "smart light":{mcu:"esp32",components:[{id:"neopixel_strip",type:"neopixel"},{id:"ldr",type:"ldr"},{id:"pir",type:"pir"},{id:"btn_mode",type:"button"}],power:"usb",keywords:["smart light","lamp","light strip","mood light","rgb light","ambient"]},
+  "thermostat":{mcu:"esp32",components:[{id:"oled",type:"oled"},{id:"temp_sensor",type:"sensor"},{id:"relay",type:"relay"},{id:"btn_up",type:"button"},{id:"btn_down",type:"button"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["thermostat","hvac","heating","cooling","climate","temperature control"]},
+  "smart plug":{mcu:"esp32",components:[{id:"relay",type:"relay"},{id:"led_status",type:"led",color:"green"},{id:"btn_toggle",type:"button"},{id:"sensor_current",type:"sensor"}],power:"usb",keywords:["smart plug","outlet","power","switch","on off"]},
+  "smart lock":{mcu:"esp32-s3",components:[{id:"servo",type:"servo"},{id:"rfid",type:"rfid"},{id:"oled",type:"oled"},{id:"buzzer",type:"buzzer"},{id:"led_status",type:"neopixel"},{id:"btn_open",type:"button"}],power:"battery",keywords:["smart lock","door lock","keyless","access","entry"]},
+  "garage opener":{mcu:"esp32",components:[{id:"relay",type:"relay"},{id:"btn_open",type:"button"},{id:"ultrasonic",type:"ultrasonic"},{id:"led_status",type:"led",color:"green"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["garage","opener","gate"]},
+
+  // Security & Monitoring
+  "alarm system":{mcu:"esp32-s3",components:[{id:"pir",type:"pir"},{id:"buzzer",type:"buzzer"},{id:"oled",type:"oled"},{id:"led_alarm",type:"led",color:"red"},{id:"led_armed",type:"led",color:"green"},{id:"btn_arm",type:"button"},{id:"btn_disarm",type:"button"}],power:"usb",keywords:["alarm","security","intrusion","motion detect","burglar"]},
+  "smoke detector":{mcu:"esp32",components:[{id:"gas_sensor",type:"gas_sensor"},{id:"buzzer",type:"buzzer"},{id:"led_alarm",type:"led",color:"red"},{id:"led_ok",type:"led",color:"green"}],power:"battery",keywords:["smoke","fire","detector","gas","co2"]},
+  "baby monitor":{mcu:"esp32-s3",components:[{id:"microphone",type:"microphone"},{id:"speaker",type:"speaker"},{id:"oled",type:"oled"},{id:"temp_sensor",type:"sensor"},{id:"led_status",type:"neopixel"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["baby monitor","nursery","infant","child"]},
+
+  // Garden & Outdoor
+  "plant monitor":{mcu:"esp32",components:[{id:"moisture",type:"moisture"},{id:"temp_sensor",type:"sensor"},{id:"oled",type:"oled"},{id:"led_dry",type:"led",color:"red"},{id:"led_ok",type:"led",color:"green"},{id:"buzzer",type:"buzzer"}],power:"battery",keywords:["plant","garden","soil","moisture","water","grow"]},
+  "weather station":{mcu:"esp32",components:[{id:"temp_sensor",type:"sensor"},{id:"oled",type:"oled"},{id:"ldr",type:"ldr"},{id:"led_status",type:"led",color:"blue"}],power:"usb",keywords:["weather","station","climate","rain","forecast","barometer"]},
+  "irrigation controller":{mcu:"esp32",components:[{id:"moisture",type:"moisture"},{id:"relay",type:"relay"},{id:"oled",type:"oled"},{id:"btn_manual",type:"button"},{id:"led_pump",type:"led",color:"blue"},{id:"led_status",type:"led",color:"green"}],power:"usb",keywords:["irrigation","sprinkler","watering","drip"]},
+
+  // Pet
+  "pet feeder":{mcu:"esp32",components:[{id:"servo",type:"servo"},{id:"oled",type:"oled"},{id:"btn_feed",type:"button"},{id:"buzzer",type:"buzzer"},{id:"led_status",type:"led",color:"green"},{id:"ultrasonic",type:"ultrasonic"}],power:"usb",keywords:["pet","feeder","cat","dog","food","treat","dispenser"]},
+  "pet tracker":{mcu:"esp32-s3",components:[{id:"gps",type:"gps"},{id:"oled",type:"oled"},{id:"buzzer",type:"buzzer"},{id:"led_status",type:"neopixel"}],power:"battery",keywords:["pet tracker","collar","tracking","find my"]},
+
+  // Wearables & Health
+  "fitness tracker":{mcu:"esp32-s3",components:[{id:"oled",type:"oled"},{id:"sensor_imu",type:"sensor"},{id:"led_hr",type:"neopixel"},{id:"buzzer",type:"buzzer"},{id:"btn_mode",type:"button"}],power:"battery",keywords:["fitness","tracker","step","pedometer","health","wristband","watch"]},
+  "pulse oximeter":{mcu:"esp32",components:[{id:"oled",type:"oled"},{id:"sensor_spo2",type:"sensor"},{id:"led_status",type:"led",color:"red"},{id:"buzzer",type:"buzzer"},{id:"btn_start",type:"button"}],power:"battery",keywords:["pulse","oximeter","spo2","heart rate","oxygen"]},
+
+  // Audio & Music
+  "music box":{mcu:"esp32-s3",components:[{id:"speaker",type:"speaker"},{id:"btn_play",type:"button"},{id:"btn_next",type:"button"},{id:"potentiometer",type:"potentiometer"},{id:"led_play",type:"neopixel"}],power:"battery",keywords:["music box","jukebox","mp3","audio player","sound"]},
+  "guitar tuner":{mcu:"esp32",components:[{id:"microphone",type:"microphone"},{id:"oled",type:"oled"},{id:"led_flat",type:"led",color:"red"},{id:"led_tune",type:"led",color:"green"},{id:"led_sharp",type:"led",color:"yellow"},{id:"btn_mode",type:"button"}],power:"battery",keywords:["guitar","tuner","instrument","pitch","tune"]},
+
+  // Education & STEM
+  "simon game":{mcu:"arduino-uno",components:[{id:"led_red",type:"led",color:"red"},{id:"led_green",type:"led",color:"green"},{id:"led_blue",type:"led",color:"blue"},{id:"led_yellow",type:"led",color:"yellow"},{id:"btn_red",type:"button"},{id:"btn_green",type:"button"},{id:"btn_blue",type:"button"},{id:"btn_yellow",type:"button"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["simon","game","memory","pattern"]},
+  "reaction timer":{mcu:"arduino-uno",components:[{id:"led_go",type:"led",color:"green"},{id:"led_wait",type:"led",color:"red"},{id:"btn_player1",type:"button"},{id:"btn_player2",type:"button"},{id:"oled",type:"oled"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["reaction","timer","reflex","speed","game"]},
+  "dice roller":{mcu:"arduino-nano",components:[{id:"oled",type:"oled"},{id:"btn_roll",type:"button"},{id:"buzzer",type:"buzzer"},{id:"led_status",type:"led",color:"blue"}],power:"battery",keywords:["dice","roller","random","d20","tabletop","board game"]},
+
+  // IoT & Networking
+  "mesh node":{mcu:"esp32-s3",components:[{id:"oled",type:"oled"},{id:"led_status",type:"led",color:"green"},{id:"led_rx",type:"led",color:"blue"},{id:"led_tx",type:"led",color:"yellow"},{id:"btn_pair",type:"button"},{id:"btn_reset",type:"button"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["mesh","node","network","p2p","swarm","iot hub"]},
+  "remote control":{mcu:"esp32",components:[{id:"ir_emitter",type:"ir_emitter"},{id:"oled",type:"oled"},{id:"btn_power",type:"button"},{id:"btn_up",type:"button"},{id:"btn_down",type:"button"},{id:"btn_ok",type:"button"},{id:"led_tx",type:"led",color:"blue"}],power:"battery",keywords:["remote","control","ir","tv","universal"]},
+
+  // Utility
+  "timer":{mcu:"arduino-nano",components:[{id:"oled",type:"oled"},{id:"btn_start",type:"button"},{id:"btn_reset",type:"button"},{id:"buzzer",type:"buzzer"},{id:"led_running",type:"led",color:"green"},{id:"led_done",type:"led",color:"red"}],power:"battery",keywords:["timer","countdown","stopwatch","clock","pomodoro"]},
+  "night light":{mcu:"arduino-nano",components:[{id:"neopixel_ring",type:"neopixel"},{id:"ldr",type:"ldr"},{id:"potentiometer",type:"potentiometer"},{id:"btn_mode",type:"button"}],power:"usb",keywords:["night light","nightlight","bedside","glow","ambient light"]},
+  "parking sensor":{mcu:"arduino-uno",components:[{id:"ultrasonic",type:"ultrasonic"},{id:"led_far",type:"led",color:"green"},{id:"led_mid",type:"led",color:"yellow"},{id:"led_close",type:"led",color:"red"},{id:"buzzer",type:"buzzer"}],power:"usb",keywords:["parking","sensor","distance","proximity","backup"]},
+  "scale":{mcu:"arduino-uno",components:[{id:"sensor_load",type:"sensor"},{id:"oled",type:"oled"},{id:"btn_tare",type:"button"},{id:"led_status",type:"led",color:"green"}],power:"usb",keywords:["scale","weight","load cell","measure","kitchen scale"]},
+};
+
+// Resolve product archetype from description
+function resolveArchetype(d){
+  d=d.toLowerCase();
+  // Direct name match first
+  for(const[name,arch] of Object.entries(PRODUCT_ARCHETYPES)){
+    if(d.includes(name))return arch;
+  }
+  // Keyword match — score each archetype
+  let best=null,bestScore=0;
+  for(const[name,arch] of Object.entries(PRODUCT_ARCHETYPES)){
+    let score=0;
+    for(const kw of arch.keywords){
+      if(d.includes(kw))score+=kw.split(" ").length; // multi-word keywords score higher
+    }
+    if(score>bestScore){bestScore=score;best=arch;}
+  }
+  return bestScore>=1?best:null;
+}
+
 let artifacts={};let mhdlDoc=null;
-function parseMCU(d){d=d.toLowerCase();if(d.includes("esp32-s3"))return "esp32-s3";if(d.includes("esp32"))return "esp32";if(d.includes("nano"))return "arduino-nano";if(d.includes("arduino"))return "arduino-uno";if(d.includes("pico")||d.includes("rp2040"))return "rp2040";if(d.includes("wifi")||d.includes("mesh")||d.includes("iot")||d.includes("wireless"))return "esp32-s3";return "esp32";}
-function parseComps(d){const c=[];d=d.toLowerCase();const lm=d.match(/(\d+)\s*(?:x\s*)?(?:status\s+)?leds?/i);const cols=["green","yellow","red","blue","white"];if(lm){const n=parseInt(lm[1]);for(let i=0;i<n;i++)c.push({id:`led_${cols[i%5]}`,type:"led",color:cols[i%5]});}else if(d.includes("led"))c.push({id:"led_green",type:"led",color:"green"});if(d.includes("oled"))c.push({id:"oled",type:"oled"});if(d.includes("lcd"))c.push({id:"lcd",type:"oled"});const bm=d.match(/(\d+)\s*(?:x\s*)?(?:push\s*)?buttons?/i);const bn=["pair","reset","mode"];if(bm){const n=parseInt(bm[1]);for(let i=0;i<n;i++)c.push({id:`btn_${bn[i%3]}`,type:"button"});}else if(d.includes("button"))c.push({id:"btn_main",type:"button"});if(d.includes("buzzer")||d.includes("speaker"))c.push({id:"buzzer",type:"buzzer"});if(d.includes("dht")||d.includes("temperature")||d.includes("humidity")||d.includes("weather"))c.push({id:"temp_sensor",type:"sensor"});if(d.includes("motor"))c.push({id:"motor",type:"motor"});return c;}
-function generateMHDL(desc){const fam=parseMCU(desc);const comps=parseComps(desc);const pool=[...(GPIO_POOLS[fam]||GPIO_POOLS["esp32"])];const i2c=I2C[fam]||{sda:21,scl:22};const mcuInfo=MCU_MAP[fam]||MCU_MAP["esp32"];const components=[];const connections=[];const cutouts=[{type:"usb-c",componentRef:"mcu",wall:"back"}];const mcuPins=[];for(const comp of comps){const tpl=TEMPLATES[comp.type];if(!tpl)continue;const pins=tpl.pins.map(p=>{let gpio;if(p.mode==="i2c-sda")gpio=i2c.sda;else if(p.mode==="i2c-scl")gpio=i2c.scl;else if(p.mode!=="ground"&&p.mode!=="power")gpio=pool.shift();return{...p,gpio};});components.push({id:comp.id,type:comp.type,pins,properties:comp.color?{color:comp.color}:{}});for(const pin of pins){if(pin.gpio!==undefined&&pin.mode!=="ground"&&pin.mode!=="power"){const mPin={id:`${comp.id}_${pin.id}`,gpio:pin.gpio,mode:pin.mode};mcuPins.push(mPin);connections.push({from:`mcu.${mPin.id}`,to:`${comp.id}.${pin.id}`,type:"wire"});}}if(tpl.cutout)cutouts.push({type:tpl.cutout,componentRef:comp.id,wall:"front"});}const bw=Math.max(50,30+comps.length*8),bh=Math.max(35,25+comps.length*5);
+function parseMCU(d,archetype){
+  d=d.toLowerCase();
+  // Explicit MCU in description always wins
+  if(d.includes("esp32-s3"))return "esp32-s3";if(d.includes("esp32"))return "esp32";if(d.includes("nano"))return "arduino-nano";if(d.includes("arduino"))return "arduino-uno";if(d.includes("pico")||d.includes("rp2040"))return "rp2040";
+  // Archetype suggestion
+  if(archetype&&archetype.mcu)return archetype.mcu;
+  // Fallback heuristics
+  if(d.includes("wifi")||d.includes("mesh")||d.includes("iot")||d.includes("wireless")||d.includes("bluetooth")||d.includes("ble"))return "esp32-s3";
+  if(d.includes("audio")||d.includes("voice")||d.includes("speak")||d.includes("talk")||d.includes("music")||d.includes("sound"))return "esp32-s3";
+  if(d.includes("gps")||d.includes("track")||d.includes("camera"))return "esp32-s3";
+  return "esp32";
+}
+function parseComps(d,archetype){
+  const c=[];d=d.toLowerCase();
+
+  // If an archetype matched, start with its component set
+  if(archetype){
+    for(const comp of archetype.components){
+      c.push({id:comp.id,type:comp.type,color:comp.color||null});
+    }
+  }
+
+  // Then layer on any explicit hardware keywords from the description
+  const existing=new Set(c.map(x=>x.type));
+
+  const lm=d.match(/(\d+)\s*(?:x\s*)?(?:status\s+)?leds?/i);const cols=["green","yellow","red","blue","white"];
+  if(lm){const n=parseInt(lm[1]);for(let i=0;i<n;i++){const id=`led_${cols[i%5]}`;if(!c.find(x=>x.id===id))c.push({id,type:"led",color:cols[i%5]});}}
+  else if(d.includes("led")&&!existing.has("led")&&!existing.has("neopixel"))c.push({id:"led_green",type:"led",color:"green"});
+
+  if(d.includes("oled")&&!existing.has("oled"))c.push({id:"oled",type:"oled"});
+  if(d.includes("lcd")&&!existing.has("oled"))c.push({id:"lcd",type:"oled"});
+
+  const bm=d.match(/(\d+)\s*(?:x\s*)?(?:push\s*)?buttons?/i);const bn=["pair","reset","mode"];
+  if(bm){const n=parseInt(bm[1]);for(let i=0;i<n;i++){const id=`btn_${bn[i%3]}`;if(!c.find(x=>x.id===id))c.push({id,type:"button"});}}
+  else if(d.includes("button")&&!existing.has("button"))c.push({id:"btn_main",type:"button"});
+
+  if((d.includes("buzzer"))&&!existing.has("buzzer"))c.push({id:"buzzer",type:"buzzer"});
+  if((d.includes("speaker"))&&!existing.has("speaker"))c.push({id:"speaker",type:"speaker"});
+  if((d.includes("microphone")||d.includes("mic"))&&!existing.has("microphone"))c.push({id:"microphone",type:"microphone"});
+  if((d.includes("servo"))&&!existing.has("servo"))c.push({id:"servo",type:"servo"});
+  if((d.includes("motor"))&&!existing.has("motor"))c.push({id:"motor",type:"motor"});
+  if((d.includes("relay"))&&!existing.has("relay"))c.push({id:"relay",type:"relay"});
+  if((d.includes("neopixel")||d.includes("rgb led")||d.includes("ws2812"))&&!existing.has("neopixel"))c.push({id:"neopixel",type:"neopixel"});
+  if((d.includes("ultrasonic")||d.includes("distance sensor"))&&!existing.has("ultrasonic"))c.push({id:"ultrasonic",type:"ultrasonic"});
+  if((d.includes("pir")||d.includes("motion sensor")||d.includes("motion detect"))&&!existing.has("pir"))c.push({id:"pir",type:"pir"});
+  if((d.includes("light sensor")||d.includes("ldr")||d.includes("photoresistor"))&&!existing.has("ldr"))c.push({id:"ldr",type:"ldr"});
+  if((d.includes("gps")||d.includes("location"))&&!existing.has("gps"))c.push({id:"gps",type:"gps"});
+  if((d.includes("rfid")||d.includes("nfc"))&&!existing.has("rfid"))c.push({id:"rfid",type:"rfid"});
+  if((d.includes("potentiometer")||d.includes("knob")||d.includes("dial"))&&!existing.has("potentiometer"))c.push({id:"potentiometer",type:"potentiometer"});
+  if((d.includes("moisture")||d.includes("soil"))&&!existing.has("moisture"))c.push({id:"moisture",type:"moisture"});
+  if((d.includes("gas")||d.includes("smoke")||d.includes("air quality"))&&!existing.has("gas_sensor"))c.push({id:"gas_sensor",type:"gas_sensor"});
+  if((d.includes("ir receiver")||d.includes("infrared receiver"))&&!existing.has("ir_receiver"))c.push({id:"ir_receiver",type:"ir_receiver"});
+  if((d.includes("ir emitter")||d.includes("infrared emitter"))&&!existing.has("ir_emitter"))c.push({id:"ir_emitter",type:"ir_emitter"});
+  if((d.includes("dht")||d.includes("temperature")||d.includes("humidity"))&&!existing.has("sensor"))c.push({id:"temp_sensor",type:"sensor"});
+
+  return c;
+}
+function generateMHDL(desc){const archetype=resolveArchetype(desc);const fam=parseMCU(desc,archetype);const comps=parseComps(desc,archetype);const pool=[...(GPIO_POOLS[fam]||GPIO_POOLS["esp32"])];const i2c=I2C[fam]||{sda:21,scl:22};const mcuInfo=MCU_MAP[fam]||MCU_MAP["esp32"];const components=[];const connections=[];const cutouts=[{type:"usb-c",componentRef:"mcu",wall:"back"}];const mcuPins=[];for(const comp of comps){const tpl=TEMPLATES[comp.type];if(!tpl)continue;const pins=tpl.pins.map(p=>{let gpio;if(p.mode==="i2c-sda")gpio=i2c.sda;else if(p.mode==="i2c-scl")gpio=i2c.scl;else if(p.mode!=="ground"&&p.mode!=="power")gpio=pool.shift();return{...p,gpio};});components.push({id:comp.id,type:comp.type,pins,properties:comp.color?{color:comp.color}:{}});for(const pin of pins){if(pin.gpio!==undefined&&pin.mode!=="ground"&&pin.mode!=="power"){const mPin={id:`${comp.id}_${pin.id}`,gpio:pin.gpio,mode:pin.mode};mcuPins.push(mPin);connections.push({from:`mcu.${mPin.id}`,to:`${comp.id}.${pin.id}`,type:"wire"});}}if(tpl.cutout)cutouts.push({type:tpl.cutout,componentRef:comp.id,wall:"front"});}const bw=Math.max(50,30+comps.length*8),bh=Math.max(35,25+comps.length*5);
 return{meta:{schemaVersion:"0.1.0",name:extractName(desc),description:desc,version:"1.0.0",license:"MIT",author:"MeshCue Forge"},board:{mcu:{id:"mcu",type:"mcu",family:fam,model:mcuInfo.model,clockMhz:240,flashKb:mcuInfo.flash,ramKb:mcuInfo.ram,wireless:mcuInfo.wireless,pins:mcuPins},components,connections,power:{source:"usb",voltageIn:5,regulatorOut:3.3,maxCurrentMa:1000},dimensions:{widthMm:bw,heightMm:bh,depthMm:20},mountingHoles:{diameterMm:3,positions:[{x:4,y:4},{x:bw-4,y:4},{x:4,y:bh-4},{x:bw-4,y:bh-4}]}},firmware:{framework:"arduino",entrypoint:"main.ino",libraries:components.some(c=>c.type==="oled")?[{name:"Adafruit_SSD1306"},{name:"Adafruit_GFX"}]:[],features:[]},enclosure:{type:"snap-fit",wallThicknessMm:2,cornerRadiusMm:3,cutouts,mounts:"m3-inserts",ventilation:true,labelEmboss:extractName(desc),material:"pla"},bom:{auto:true},docs:{generatePinout:true,generateAssembly:true,generateBOM:true,generatePrintGuide:true}};}
 function extractName(d){const m=d.match(/(?:called|named|for)\s+["']?([A-Z][A-Za-z0-9\- ]+)/);if(m)return m[1].trim();return d.split(/\s+/).filter(w=>w.length>3).slice(0,2).map(w=>w[0].toUpperCase()+w.slice(1).toLowerCase()).join(" ")||"My Board";}
-function genCircuit(doc){const parts=[{type:doc.board.mcu.family.startsWith("esp32")?"board-esp32-devkit-c-v4":"wokwi-arduino-uno",id:"mcu",top:0,left:0}];const wMap={led:"wokwi-led",button:"wokwi-pushbutton",oled:"board-ssd1306",buzzer:"wokwi-buzzer",sensor:"wokwi-dht22"};doc.board.components.forEach((c,i)=>{if(wMap[c.type])parts.push({type:wMap[c.type],id:c.id,top:100+(i%6)*80,left:50+Math.floor(i/6)*250,...(c.properties?.color?{attrs:{color:c.properties.color}}:{})});});const conns=doc.board.connections.map(c=>({from:c.from.replace(".",":"),to:c.to.replace(".",":"),color:"green"}));return JSON.stringify({version:1,author:"MeshCue Forge",editor:"meshcue-forge",parts,connections:conns},null,2);}
-function genFirmware(doc){const lines=[];lines.push(`/**\n * ${doc.meta.name} — Firmware\n * Generated by MeshCue Forge\n */\n`);lines.push(`#include <Arduino.h>`);if(doc.board.components.some(c=>c.type==="oled"))lines.push(`#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>`);lines.push(`\n// Pin Definitions`);for(const c of doc.board.components)for(const p of c.pins)if(p.gpio!==undefined)lines.push(`#define PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()} ${p.gpio}`);lines.push(`\n// Globals`);lines.push(`unsigned long lastUpdate = 0;`);if(doc.board.components.some(c=>c.type==="oled")){lines.push(`Adafruit_SSD1306 display(128, 64, &Wire, -1);`);}for(const c of doc.board.components){if(c.type==="button")lines.push(`bool ${c.id}_pressed = false;`);}lines.push(`\nvoid setup() {\n  Serial.begin(115200);\n  Serial.println("${doc.meta.name} starting...");`);for(const c of doc.board.components){if(c.type==="led"){const p=c.pins.find(p=>p.mode==="digital-out");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, OUTPUT);`);}if(c.type==="button"){const p=c.pins.find(p=>p.mode==="digital-in");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, INPUT_PULLUP);`);}if(c.type==="buzzer"){const p=c.pins.find(p=>p.mode==="pwm"||p.mode==="digital-out");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, OUTPUT);`);}if(c.type==="oled"){const sda=c.pins.find(p=>p.mode==="i2c-sda");const scl=c.pins.find(p=>p.mode==="i2c-scl");lines.push(`  Wire.begin(${sda?.gpio||21}, ${scl?.gpio||22});\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  display.clearDisplay();\n  display.setTextSize(1);\n  display.setTextColor(SSD1306_WHITE);\n  display.println("${doc.meta.name}");\n  display.display();`);}}lines.push(`  Serial.println("Ready.");\n}\n`);lines.push(`void loop() {\n  if (millis() - lastUpdate >= 1000) {\n    lastUpdate = millis();\n    // Your logic here\n  }\n  delay(10);\n}`);for(const c of doc.board.components){if(c.type==="led"){lines.push(`\nvoid set_${c.id}(bool on) {\n  digitalWrite(PIN_${c.id.toUpperCase()}_ANODE, on ? HIGH : LOW);\n}`);}if(c.type==="buzzer"){lines.push(`\nvoid beep(int freq, int dur) {\n  tone(PIN_${c.id.toUpperCase()}_SIG, freq, dur);\n}`);}}return lines.join("\n");}
+function genCircuit(doc){const parts=[{type:doc.board.mcu.family.startsWith("esp32")?"board-esp32-devkit-c-v4":"wokwi-arduino-uno",id:"mcu",top:0,left:0}];const wMap={led:"wokwi-led",button:"wokwi-pushbutton",oled:"board-ssd1306",buzzer:"wokwi-buzzer",sensor:"wokwi-dht22",speaker:"wokwi-buzzer",microphone:"wokwi-analog-sensor",servo:"wokwi-servo",motor:"wokwi-motor",relay:"wokwi-relay",ir_receiver:"wokwi-ir-receiver",neopixel:"wokwi-neopixel",ultrasonic:"wokwi-hc-sr04",pir:"wokwi-pir-sensor",ldr:"wokwi-photoresistor",potentiometer:"wokwi-potentiometer",rfid:"wokwi-rfid",moisture:"wokwi-analog-sensor",gas_sensor:"wokwi-analog-sensor",ir_emitter:"wokwi-led"};doc.board.components.forEach((c,i)=>{if(wMap[c.type])parts.push({type:wMap[c.type],id:c.id,top:100+(i%6)*80,left:50+Math.floor(i/6)*250,...(c.properties?.color?{attrs:{color:c.properties.color}}:{})});});const conns=doc.board.connections.map(c=>({from:c.from.replace(".",":"),to:c.to.replace(".",":"),color:"green"}));return JSON.stringify({version:1,author:"MeshCue Forge",editor:"meshcue-forge",parts,connections:conns},null,2);}
+function genFirmware(doc){const lines=[];lines.push(`/**\n * ${doc.meta.name} — Firmware\n * Generated by MeshCue Forge\n */\n`);lines.push(`#include <Arduino.h>`);
+if(doc.board.components.some(c=>c.type==="oled"))lines.push(`#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>`);
+if(doc.board.components.some(c=>c.type==="neopixel"))lines.push(`#include <Adafruit_NeoPixel.h>`);
+if(doc.board.components.some(c=>c.type==="servo"))lines.push(`#include <ESP32Servo.h>`);
+lines.push(`\n// Pin Definitions`);for(const c of doc.board.components)for(const p of c.pins)if(p.gpio!==undefined)lines.push(`#define PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()} ${p.gpio}`);
+lines.push(`\n// Globals`);lines.push(`unsigned long lastUpdate = 0;`);
+if(doc.board.components.some(c=>c.type==="oled"))lines.push(`Adafruit_SSD1306 display(128, 64, &Wire, -1);`);
+for(const c of doc.board.components){
+if(c.type==="button")lines.push(`bool ${c.id}_pressed = false;`);
+if(c.type==="neopixel")lines.push(`Adafruit_NeoPixel ${c.id}_strip(8, PIN_${c.id.toUpperCase()}_DATA, NEO_GRB + NEO_KHZ800);`);
+if(c.type==="servo")lines.push(`Servo ${c.id}_servo;`);
+if(c.type==="ultrasonic")lines.push(`long ${c.id}_distance = 0;`);
+}
+lines.push(`\nvoid setup() {\n  Serial.begin(115200);\n  Serial.println("${doc.meta.name} starting...");`);
+for(const c of doc.board.components){
+if(c.type==="led"||c.type==="ir_emitter"){const p=c.pins.find(p=>p.mode==="digital-out");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, OUTPUT);`);}
+if(c.type==="button"||c.type==="ir_receiver"||c.type==="pir"){const p=c.pins.find(p=>p.mode==="digital-in");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, INPUT_PULLUP);`);}
+if(c.type==="buzzer"||c.type==="speaker"){const p=c.pins.find(p=>p.mode==="pwm");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, OUTPUT);`);}
+if(c.type==="motor"){lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_IN1, OUTPUT);\n  pinMode(PIN_${c.id.toUpperCase()}_IN2, OUTPUT);`);}
+if(c.type==="relay"){const p=c.pins.find(p=>p.mode==="digital-out");if(p)lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_${p.id.toUpperCase()}, OUTPUT);`);}
+if(c.type==="neopixel")lines.push(`  ${c.id}_strip.begin();\n  ${c.id}_strip.setBrightness(50);\n  ${c.id}_strip.show();`);
+if(c.type==="servo")lines.push(`  ${c.id}_servo.attach(PIN_${c.id.toUpperCase()}_SIG);`);
+if(c.type==="ultrasonic")lines.push(`  pinMode(PIN_${c.id.toUpperCase()}_TRIG, OUTPUT);\n  pinMode(PIN_${c.id.toUpperCase()}_ECHO, INPUT);`);
+if(c.type==="oled"){const sda=c.pins.find(p=>p.mode==="i2c-sda");const scl=c.pins.find(p=>p.mode==="i2c-scl");lines.push(`  Wire.begin(${sda?.gpio||21}, ${scl?.gpio||22});\n  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);\n  display.clearDisplay();\n  display.setTextSize(1);\n  display.setTextColor(SSD1306_WHITE);\n  display.println("${doc.meta.name}");\n  display.display();`);}
+}
+lines.push(`  Serial.println("Ready.");\n}\n`);
+lines.push(`void loop() {\n  if (millis() - lastUpdate >= 1000) {\n    lastUpdate = millis();`);
+for(const c of doc.board.components){
+if(c.type==="ultrasonic")lines.push(`    ${c.id}_distance = readDistance();`);
+if(c.type==="pir")lines.push(`    if (digitalRead(PIN_${c.id.toUpperCase()}_DATA)) {\n      Serial.println("Motion detected!");\n    }`);
+}
+lines.push(`  }\n  delay(10);\n}`);
+for(const c of doc.board.components){
+if(c.type==="led")lines.push(`\nvoid set_${c.id}(bool on) {\n  digitalWrite(PIN_${c.id.toUpperCase()}_ANODE, on ? HIGH : LOW);\n}`);
+if(c.type==="buzzer"||c.type==="speaker")lines.push(`\nvoid beep_${c.id}(int freq, int dur) {\n  tone(PIN_${c.id.toUpperCase()}_SIG, freq, dur);\n}`);
+if(c.type==="motor")lines.push(`\nvoid ${c.id}_forward() {\n  digitalWrite(PIN_${c.id.toUpperCase()}_IN1, HIGH);\n  digitalWrite(PIN_${c.id.toUpperCase()}_IN2, LOW);\n}\nvoid ${c.id}_stop() {\n  digitalWrite(PIN_${c.id.toUpperCase()}_IN1, LOW);\n  digitalWrite(PIN_${c.id.toUpperCase()}_IN2, LOW);\n}`);
+if(c.type==="servo")lines.push(`\nvoid ${c.id}_setAngle(int angle) {\n  ${c.id}_servo.write(angle);\n}`);
+if(c.type==="relay")lines.push(`\nvoid ${c.id}_set(bool on) {\n  digitalWrite(PIN_${c.id.toUpperCase()}_SIG, on ? HIGH : LOW);\n}`);
+if(c.type==="neopixel")lines.push(`\nvoid ${c.id}_setColor(uint8_t r, uint8_t g, uint8_t b) {\n  for(int i=0; i<${c.id}_strip.numPixels(); i++) {\n    ${c.id}_strip.setPixelColor(i, ${c.id}_strip.Color(r, g, b));\n  }\n  ${c.id}_strip.show();\n}`);
+}
+if(doc.board.components.some(c=>c.type==="ultrasonic")){const u=doc.board.components.find(c=>c.type==="ultrasonic");lines.push(`\nlong readDistance() {\n  digitalWrite(PIN_${u.id.toUpperCase()}_TRIG, LOW);\n  delayMicroseconds(2);\n  digitalWrite(PIN_${u.id.toUpperCase()}_TRIG, HIGH);\n  delayMicroseconds(10);\n  digitalWrite(PIN_${u.id.toUpperCase()}_TRIG, LOW);\n  return pulseIn(PIN_${u.id.toUpperCase()}_ECHO, HIGH) / 58;\n}`);}
+return lines.join("\n");}
 function genEnclosure(doc){const w=doc.board.dimensions.widthMm+4,h=doc.board.dimensions.heightMm+4,d=(doc.board.dimensions.depthMm||20)+4;return`/**\n * ${doc.meta.name} — 3D Printable Enclosure\n * Generated by MeshCue Forge\n * Material: PLA | Layer: 0.2mm | Infill: 20%\n */\n\ncase_w = ${w};\ncase_h = ${h};\ncase_d = ${d};\nwall = 2;\ncorner_r = 3;\nsplit_z = ${(d*0.7).toFixed(1)};\ntolerance = 0.3;\n\nmodule rounded_box(w, h, d, r) {\n  hull() {\n    for (x=[r,w-r]) for (y=[r,h-r]) for (z=[r,d-r])\n      translate([x,y,z]) sphere(r=r, $fn=24);\n  }\n}\n\nmodule shell() {\n  difference() {\n    rounded_box(case_w, case_h, case_d, corner_r);\n    translate([wall,wall,wall])\n      rounded_box(case_w-wall*2, case_h-wall*2, case_d-wall*2, max(corner_r-wall,0.1));\n  }\n}\n\nmodule cutouts() {\n  // USB-C (back)\n  translate([case_w/2-4.75, case_h-wall-0.1, case_d/2-1.75])\n    cube([9.5, wall+0.2, 3.5]);\n${doc.enclosure.cutouts.filter(c=>c.type==="oled-window").map(()=>`  // OLED window\n  translate([case_w/2-13.5, -0.1, case_d/2-7.5])\n    cube([27, wall+0.2, 15]);`).join("\n")}\n${doc.enclosure.cutouts.filter(c=>c.type==="led-hole").map((_,i)=>`  // LED ${i+1}\n  translate([${15+i*10}, -0.1, case_d*0.7])\n    rotate([-90,0,0]) cylinder(h=wall+0.2, d=5, $fn=24);`).join("\n")}\n}\n\nmodule mount_posts() {\n${doc.board.mountingHoles.positions.map(p=>`  translate([${p.x+2},${p.y+2},wall]) difference() {\n    cylinder(h=5, r=2.5, $fn=24);\n    cylinder(h=5.1, r=1.5, $fn=24);\n  }`).join("\n")}\n}\n\nmodule base() {\n  difference() {\n    intersection() { shell(); cube([case_w,case_h,split_z]); }\n    cutouts();\n  }\n  mount_posts();\n}\n\nmodule lid() {\n  difference() {\n    intersection() { shell(); translate([0,0,split_z]) cube([case_w,case_h,case_d-split_z]); }\n    cutouts();\n  }\n}\n\n// Render\nbase();\n// lid();\n// Exploded: base(); translate([0,0,split_z+15]) lid();`;}
 function genBOM(doc){return[{name:doc.board.mcu.model,type:"MCU",qty:1,notes:doc.board.mcu.family},...doc.board.components.map(c=>({name:c.id,type:c.type,qty:1,notes:c.properties?.color||""})),{name:"M3 threaded insert",type:"Hardware",qty:4,notes:"Mounting"},{name:"M3x6mm screw",type:"Hardware",qty:4,notes:"Mounting"}];}
-const typeColors={MCU:"rgba(139,92,246,0.15);color:var(--violet)",led:"rgba(74,222,128,0.15);color:var(--green)",button:"rgba(245,158,11,0.15);color:var(--orange)",oled:"rgba(34,211,238,0.15);color:var(--cyan)",buzzer:"rgba(217,70,239,0.15);color:var(--fuchsia)",sensor:"rgba(248,113,113,0.15);color:var(--red)",Hardware:"rgba(255,255,255,0.08);color:var(--text-dim)"};
+const typeColors={MCU:"rgba(139,92,246,0.15);color:var(--violet)",led:"rgba(74,222,128,0.15);color:var(--green)",button:"rgba(245,158,11,0.15);color:var(--orange)",oled:"rgba(34,211,238,0.15);color:var(--cyan)",buzzer:"rgba(217,70,239,0.15);color:var(--fuchsia)",sensor:"rgba(248,113,113,0.15);color:var(--red)",speaker:"rgba(217,70,239,0.15);color:var(--fuchsia)",microphone:"rgba(217,70,239,0.15);color:var(--fuchsia)",servo:"rgba(245,158,11,0.15);color:var(--orange)",motor:"rgba(245,158,11,0.15);color:var(--orange)",relay:"rgba(248,113,113,0.15);color:var(--red)",neopixel:"rgba(74,222,128,0.15);color:var(--green)",ultrasonic:"rgba(34,211,238,0.15);color:var(--cyan)",pir:"rgba(248,113,113,0.15);color:var(--red)",ldr:"rgba(245,158,11,0.15);color:var(--orange)",gps:"rgba(34,211,238,0.15);color:var(--cyan)",rfid:"rgba(139,92,246,0.15);color:var(--violet)",potentiometer:"rgba(245,158,11,0.15);color:var(--orange)",moisture:"rgba(34,211,238,0.15);color:var(--cyan)",gas_sensor:"rgba(248,113,113,0.15);color:var(--red)",ir_receiver:"rgba(248,113,113,0.15);color:var(--red)",ir_emitter:"rgba(248,113,113,0.15);color:var(--red)",Hardware:"rgba(255,255,255,0.08);color:var(--text-dim)"};
 
 // ── UI Logic ────────────────────────────────
 function setExample(el){document.getElementById("forgeInput").value=el.textContent;document.getElementById("forgeInput").focus();}

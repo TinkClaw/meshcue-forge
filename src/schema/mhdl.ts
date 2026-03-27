@@ -26,6 +26,20 @@ export type ComponentType =
   | "crystal"
   | "transistor"
   | "diode"
+  | "speaker"
+  | "microphone"
+  | "servo"
+  | "ir_receiver"
+  | "ir_emitter"
+  | "neopixel"
+  | "ultrasonic"
+  | "pir"
+  | "ldr"
+  | "gps"
+  | "rfid"
+  | "potentiometer"
+  | "moisture"
+  | "gas_sensor"
   | "custom";
 
 export type MCUFamily =
@@ -169,6 +183,8 @@ export type CutoutType =
   | "vent"
   | "sd-card"
   | "audio-jack"
+  | "speaker-grille"
+  | "mic-hole"
   | "custom-rect"
   | "custom-circle";
 
