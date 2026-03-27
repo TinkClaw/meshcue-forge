@@ -33,7 +33,7 @@ services:
       - MESHCUE_MESH_ENDPOINT=${MESHCUE_MESH_ENDPOINT:-ws://host.docker.internal:9871}
       - MESHCUE_DEFAULT_CHANNEL=${MESHCUE_DEFAULT_CHANNEL:-sms}
       - MESHCUE_DEFAULT_LANGUAGE=${MESHCUE_DEFAULT_LANGUAGE:-en}
-      - MESHCUE_WA_VERIFY_TOKEN=${MESHCUE_WA_VERIFY_TOKEN:-meshcue-verify}
+      - MESHCUE_WA_VERIFY_TOKEN=${MESHCUE_WA_VERIFY_TOKEN:-}
     volumes:
       - forge_data:/app/data
     networks:
@@ -53,7 +53,7 @@ services:
     profiles: ["full"]
     environment:
       - POSTGRES_USER=meshcue
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-meshcue_dev}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       - POSTGRES_DB=meshcue
     volumes:
       - postgres_data:/var/lib/postgresql/data
