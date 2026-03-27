@@ -12,26 +12,34 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0a0b;
-      --surface: #141416;
-      --surface2: #1c1c20;
-      --border: #2a2a2f;
-      --text: #e4e4e7;
-      --text-muted: #8b8b95;
-      --accent: #22d3ee;
-      --accent2: #a78bfa;
+      --bg: #0F172A;
+      --bg-deep: #0B1120;
+      --surface: rgba(255, 255, 255, 0.04);
+      --surface-solid: #1a2237;
+      --surface-hover: rgba(255, 255, 255, 0.08);
+      --glass: rgba(0, 0, 0, 0.60);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-border-hover: rgba(255, 255, 255, 0.15);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --violet: #8B5CF6;
+      --fuchsia: #D946EF;
+      --orange: #F59E0B;
+      --cyan: #22d3ee;
       --green: #4ade80;
-      --yellow: #facc15;
       --red: #f87171;
+      --spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Inter', -apple-system, sans-serif;
+      font-family: 'Outfit', -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -40,10 +48,18 @@
 
     .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
 
-    /* Nav */
+    /* ─── Nav ─────────────────────────────────── */
     nav {
-      padding: 20px 0;
-      border-bottom: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--glass-border);
     }
     nav .container {
       display: flex;
@@ -51,16 +67,32 @@
       align-items: center;
     }
     .logo {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 700;
       color: var(--text);
       text-decoration: none;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
-    .logo span { color: var(--accent); }
-    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--orange), var(--violet));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-icon svg { width: 16px; height: 16px; }
+    .logo .brand { color: var(--text-muted); font-weight: 500; }
+    .logo .forge {
+      background: linear-gradient(135deg, var(--orange), var(--violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .nav-links { display: flex; gap: 28px; align-items: center; }
     .nav-links a {
       color: var(--text-muted);
       text-decoration: none;
@@ -69,45 +101,76 @@
       transition: color 0.2s;
     }
     .nav-links a:hover { color: var(--text); }
-    .btn-github {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 16px;
-      border-radius: 8px;
+    .btn-nav-cta {
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia));
+      color: white !important;
+      padding: 8px 20px;
+      border-radius: 100px;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       text-decoration: none;
-      transition: all 0.2s;
+      transition: all 0.3s var(--spring);
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.25);
     }
-    .btn-github:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-nav-cta:hover {
+      transform: scale(1.02);
+      box-shadow: 0 6px 28px rgba(139, 92, 246, 0.35);
+    }
 
-    /* Hero */
+    /* ─── Hero ────────────────────────────────── */
     .hero {
-      padding: 100px 0 80px;
+      padding: 160px 0 100px;
       text-align: center;
+      position: relative;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse, rgba(139, 92, 246, 0.12) 0%, transparent 70%);
+      pointer-events: none;
     }
     .badge {
-      display: inline-block;
-      background: rgba(34, 211, 238, 0.1);
-      border: 1px solid rgba(34, 211, 238, 0.2);
-      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
       font-size: 13px;
       font-weight: 600;
-      padding: 6px 14px;
+      padding: 8px 18px;
       border-radius: 100px;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
       letter-spacing: 0.5px;
     }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
     h1 {
-      font-size: clamp(40px, 6vw, 64px);
+      font-size: clamp(42px, 7vw, 72px);
       font-weight: 800;
-      line-height: 1.1;
-      margin-bottom: 20px;
-      letter-spacing: -1.5px;
+      line-height: 1.05;
+      margin-bottom: 24px;
+      letter-spacing: -2px;
+      position: relative;
     }
     h1 .gradient {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia), var(--orange));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -115,204 +178,373 @@
     .subtitle {
       font-size: 18px;
       color: var(--text-muted);
-      max-width: 600px;
+      max-width: 560px;
       margin: 0 auto 40px;
       line-height: 1.7;
+      font-weight: 400;
     }
+    .hero-pills {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .pill {
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 100px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pill-icon { font-size: 14px; }
     .hero-actions {
       display: flex;
-      gap: 12px;
+      gap: 14px;
       justify-content: center;
       flex-wrap: wrap;
     }
     .btn-primary {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      color: #000;
-      padding: 12px 28px;
-      border-radius: 10px;
-      font-size: 15px;
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia));
+      color: white;
+      padding: 14px 32px;
+      border-radius: 100px;
+      font-size: 16px;
       font-weight: 600;
       text-decoration: none;
-      transition: opacity 0.2s;
+      transition: all 0.3s var(--spring);
+      box-shadow: 0 8px 32px rgba(139, 92, 246, 0.25);
+      position: relative;
+      overflow: hidden;
     }
-    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%);
+      transform: rotate(45deg) translateX(-200%);
+      animation: shine 4s infinite;
+    }
+    @keyframes shine {
+      0%, 80%, 100% { transform: rotate(45deg) translateX(-200%); }
+      40% { transform: rotate(45deg) translateX(200%); }
+    }
+    .btn-primary:hover {
+      transform: scale(1.03);
+      box-shadow: 0 12px 40px rgba(139, 92, 246, 0.35);
+    }
     .btn-secondary {
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
       color: var(--text);
-      padding: 12px 28px;
-      border-radius: 10px;
-      font-size: 15px;
+      padding: 14px 32px;
+      border-radius: 100px;
+      font-size: 16px;
       font-weight: 500;
       text-decoration: none;
-      transition: border-color 0.2s;
+      transition: all 0.3s var(--spring);
     }
-    .btn-secondary:hover { border-color: var(--text-muted); }
+    .btn-secondary:hover {
+      border-color: var(--glass-border-hover);
+      transform: scale(1.02);
+      background: var(--surface-hover);
+    }
 
-    /* Install */
+    /* ─── Install ─────────────────────────────── */
     .install-bar {
       margin: 48px auto 0;
-      max-width: 420px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 20px;
+      max-width: 440px;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 100px;
+      padding: 14px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      transition: border-color 0.3s;
     }
+    .install-bar:hover { border-color: var(--glass-border-hover); }
     .install-bar code {
       font-family: 'JetBrains Mono', monospace;
       font-size: 14px;
-      color: var(--accent);
+      color: var(--violet);
     }
     .install-bar button {
-      background: none;
+      background: rgba(139, 92, 246, 0.15);
       border: none;
-      color: var(--text-muted);
+      color: var(--violet);
       cursor: pointer;
-      font-size: 13px;
-      transition: color 0.2s;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-family: 'Outfit', sans-serif;
+      transition: all 0.2s;
     }
-    .install-bar button:hover { color: var(--text); }
+    .install-bar button:hover { background: rgba(139, 92, 246, 0.25); }
+    .install-bar button.copied { color: var(--green); background: rgba(74, 222, 128, 0.15); }
 
-    /* Pipeline */
-    .pipeline {
-      padding: 80px 0;
-    }
+    /* ─── Pipeline ────────────────────────────── */
+    .pipeline { padding: 80px 0; }
     .pipeline-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
       overflow: hidden;
+      transition: border-color 0.3s;
     }
+    .pipeline-box:hover { border-color: var(--glass-border-hover); }
     .pipeline-header {
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--glass-border);
       display: flex;
+      align-items: center;
       gap: 8px;
     }
     .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot-red { background: var(--red); }
-    .dot-yellow { background: var(--yellow); }
-    .dot-green { background: var(--green); }
+    .dot-red { background: #ef4444; }
+    .dot-yellow { background: #eab308; }
+    .dot-green { background: #22c55e; }
+    .pipeline-title {
+      margin-left: 12px;
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
     .pipeline-content {
-      padding: 28px;
+      padding: 32px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 13px;
-      line-height: 1.8;
+      line-height: 2;
       overflow-x: auto;
     }
-    .pipeline-content .comment { color: var(--text-muted); }
-    .pipeline-content .prompt { color: var(--accent); }
-    .pipeline-content .output { color: var(--green); }
-    .pipeline-content .file { color: var(--accent2); }
-    .pipeline-content .dim { color: #555; }
+    .pipeline-content .comment { color: var(--text-dim); }
+    .pipeline-content .prompt { color: var(--orange); }
+    .pipeline-content .input { color: var(--text); }
+    .pipeline-content .check { color: var(--green); }
+    .pipeline-content .file { color: var(--violet); }
+    .pipeline-content .dim { color: var(--text-dim); }
+    .pipeline-content .time { color: var(--orange); }
 
-    /* Features */
-    .features {
-      padding: 80px 0;
-    }
+    /* ─── Section Styles ──────────────────────── */
     .section-label {
       font-size: 13px;
-      font-weight: 600;
-      color: var(--accent);
-      letter-spacing: 1px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 2px;
       text-transform: uppercase;
       text-align: center;
       margin-bottom: 12px;
     }
     .section-title {
-      font-size: 36px;
+      font-size: clamp(28px, 4vw, 40px);
       font-weight: 700;
       text-align: center;
-      margin-bottom: 48px;
+      margin-bottom: 16px;
       letter-spacing: -0.5px;
     }
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 16px;
+      max-width: 500px;
+      margin: 0 auto 48px;
+    }
+
+    /* ─── Features ────────────────────────────── */
+    .features { padding: 80px 0; }
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      grid-template-columns: repeat(3, 1fr);
       gap: 16px;
     }
     .feature-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 28px;
-      transition: border-color 0.2s;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 32px 28px;
+      transition: all 0.3s var(--spring);
+      position: relative;
+      overflow: hidden;
     }
-    .feature-card:hover { border-color: var(--accent); }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--card-accent, var(--violet)), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover {
+      border-color: var(--glass-border-hover);
+      transform: translateY(-2px) scale(1.01);
+    }
+    .feature-card:hover::before { opacity: 1; }
     .feature-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      margin-bottom: 16px;
+      font-size: 20px;
+      margin-bottom: 18px;
     }
     .feature-card h3 {
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 600;
       margin-bottom: 8px;
     }
     .feature-card p {
       font-size: 14px;
       color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* ─── How It Works ────────────────────────── */
+    .how-it-works { padding: 80px 0; }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-width: 640px;
+      margin: 0 auto;
+      position: relative;
+    }
+    .steps::before {
+      content: '';
+      position: absolute;
+      left: 23px;
+      top: 44px;
+      bottom: 44px;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--violet), var(--fuchsia), var(--orange));
+      opacity: 0.3;
+    }
+    .step {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      padding: 24px 0;
+    }
+    .step-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 18px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+    .step:nth-child(1) .step-number { background: linear-gradient(135deg, var(--violet), var(--fuchsia)); color: white; }
+    .step:nth-child(2) .step-number { background: linear-gradient(135deg, var(--fuchsia), var(--orange)); color: white; }
+    .step:nth-child(3) .step-number { background: linear-gradient(135deg, var(--orange), var(--green)); color: white; }
+    .step-content h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .step-content p {
+      color: var(--text-muted);
+      font-size: 15px;
       line-height: 1.6;
     }
 
-    /* Tools */
-    .tools {
-      padding: 80px 0;
-    }
+    /* ─── Tools ────────────────────────────────── */
+    .tools { padding: 80px 0; }
     .tools-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 16px;
     }
     .tool-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
-      text-align: center;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 28px;
+      transition: all 0.3s var(--spring);
+    }
+    .tool-card:hover {
+      border-color: var(--glass-border-hover);
+      transform: translateY(-2px);
     }
     .tool-name {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      color: var(--accent);
+      font-size: 15px;
+      font-weight: 500;
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
       margin-bottom: 10px;
     }
     .tool-desc {
       font-size: 14px;
       color: var(--text-muted);
+      line-height: 1.6;
     }
 
-    /* Flagship */
-    .flagship {
-      padding: 80px 0;
-    }
+    /* ─── Flagship ─────────────────────────────── */
+    .flagship { padding: 80px 0; }
     .flagship-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 48px;
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 52px;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 48px;
+      gap: 52px;
       align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .flagship-box::before {
+      content: '';
+      position: absolute;
+      top: -200px;
+      right: -200px;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.08), transparent 60%);
+      pointer-events: none;
     }
     .flagship-box h2 {
-      font-size: 28px;
+      font-size: 30px;
       font-weight: 700;
       margin-bottom: 16px;
+      letter-spacing: -0.5px;
     }
-    .flagship-box p {
+    .flagship-box > div > p {
       color: var(--text-muted);
-      margin-bottom: 20px;
+      margin-bottom: 28px;
       line-height: 1.7;
+      font-size: 15px;
     }
     .flagship-stats {
       display: grid;
@@ -320,19 +552,28 @@
       gap: 12px;
     }
     .stat {
-      background: var(--surface2);
-      border-radius: 8px;
-      padding: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 18px;
+      transition: border-color 0.3s;
     }
+    .stat:hover { border-color: var(--glass-border-hover); }
     .stat-value {
-      font-size: 24px;
+      font-size: 28px;
       font-weight: 700;
-      color: var(--accent);
+      background: linear-gradient(135deg, var(--violet), var(--fuchsia));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .stat-label {
       font-size: 12px;
-      color: var(--text-muted);
+      color: var(--text-dim);
       margin-top: 2px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .artifacts-list {
       list-style: none;
@@ -344,68 +585,160 @@
       font-family: 'JetBrains Mono', monospace;
       font-size: 13px;
       color: var(--text-muted);
-      padding: 8px 12px;
-      background: var(--surface2);
-      border-radius: 6px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s;
     }
-    .artifacts-list li span { color: var(--green); }
+    .artifacts-list li:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--glass-border-hover);
+    }
+    .artifacts-list .li-check {
+      color: var(--green);
+      font-weight: 700;
+    }
+    .artifacts-list .li-file { color: var(--violet); font-weight: 500; }
+    .artifacts-list .li-desc { color: var(--text-dim); }
 
-    /* Footer */
-    footer {
-      padding: 40px 0;
-      border-top: 1px solid var(--border);
+    /* ─── CTA ──────────────────────────────────── */
+    .cta {
+      padding: 100px 0;
       text-align: center;
     }
-    footer p {
+    .cta-box {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(217, 70, 239, 0.08));
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 32px;
+      padding: 64px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(139, 92, 246, 0.15), transparent 70%);
+      pointer-events: none;
+    }
+    .cta-box h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+      position: relative;
+    }
+    .cta-box p {
       color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 32px;
+      position: relative;
+    }
+    .cta-box .btn-primary { position: relative; }
+
+    /* ─── Footer ───────────────────────────────── */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--glass-border);
+    }
+    footer .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    footer p {
+      color: var(--text-dim);
       font-size: 14px;
     }
-    footer a { color: var(--accent); text-decoration: none; }
-    footer a:hover { text-decoration: underline; }
+    .footer-links { display: flex; gap: 24px; }
+    .footer-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--text); }
 
+    /* ─── Responsive ───────────────────────────── */
     @media (max-width: 768px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .tools-grid { grid-template-columns: 1fr; }
       .flagship-box {
         grid-template-columns: 1fr;
-        padding: 28px;
+        padding: 32px;
+        gap: 32px;
       }
-      .hero { padding: 60px 0 40px; }
-      .nav-links a:not(.btn-github) { display: none; }
+      .hero { padding: 120px 0 60px; }
+      .nav-links a:not(.btn-nav-cta) { display: none; }
+      footer .container { flex-direction: column; gap: 16px; }
+      .cta-box { padding: 40px 24px; }
+    }
+    @media (max-width: 480px) {
+      .hero-pills { gap: 6px; }
+      .pill { font-size: 12px; padding: 5px 10px; }
     }
   </style>
 </head>
 <body>
 
+  <!-- Nav -->
   <nav>
     <div class="container">
-      <a href="/" class="logo">MeshCue <span>Forge</span></a>
+      <a href="/" class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+        </div>
+        <span><span class="brand">MeshCue</span> <span class="forge">Forge</span></span>
+      </a>
       <div class="nav-links">
         <a href="#features">Features</a>
+        <a href="#how-it-works">How It Works</a>
         <a href="#tools">Tools</a>
         <a href="#flagship">MeshCue Node</a>
-        <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-github">GitHub</a>
+        <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-nav-cta">GitHub</a>
       </div>
     </div>
   </nav>
 
+  <!-- Hero -->
   <section class="hero">
     <div class="container">
-      <div class="badge">OPEN SOURCE MCP SERVER</div>
-      <h1>The <span class="gradient">hardware compiler</span></h1>
+      <div class="badge">
+        <span class="badge-dot"></span>
+        OPEN SOURCE MCP SERVER
+      </div>
+      <h1>Describe it. Build it.<br><span class="gradient">Print it.</span></h1>
       <p class="subtitle">
-        Describe it. Build it. Print it.<br>
-        Turn natural language into complete hardware projects — circuits, firmware, 3D-printable enclosures, and docs.
+        Turn natural language into complete hardware projects — circuits, firmware, 3D-printable enclosures, and documentation. All from a single spec.
       </p>
+      <div class="hero-pills">
+        <span class="pill"><span class="pill-icon">&#9889;</span> 1ms builds</span>
+        <span class="pill"><span class="pill-icon">&#9881;</span> 6 DRC checks</span>
+        <span class="pill"><span class="pill-icon">&#9726;</span> 3D print ready</span>
+        <span class="pill"><span class="pill-icon">&#10697;</span> 9 MCU families</span>
+      </div>
       <div class="hero-actions">
         <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-primary">Get Started</a>
         <a href="#flagship" class="btn-secondary">See the MeshCue Node</a>
       </div>
       <div class="install-bar">
         <code>npm install @meshcue/forge</code>
-        <button onclick="navigator.clipboard.writeText('npm install @meshcue/forge')">Copy</button>
+        <button onclick="copyInstall(this)">Copy</button>
       </div>
     </div>
   </section>
 
+  <!-- Pipeline Demo -->
   <section class="pipeline">
     <div class="container">
       <div class="pipeline-box">
@@ -413,98 +746,137 @@
           <div class="dot dot-red"></div>
           <div class="dot dot-yellow"></div>
           <div class="dot dot-green"></div>
+          <span class="pipeline-title">meshcue-forge</span>
         </div>
         <div class="pipeline-content">
           <span class="comment"># Describe what you want to build</span><br>
-          <span class="prompt">&gt;</span> "ESP32-S3 board with OLED, 3 LEDs, 2 buttons, buzzer"<br>
+          <span class="prompt">&gt;</span> <span class="input">"ESP32-S3 board with OLED, 3 LEDs, 2 buttons, buzzer"</span><br>
           <br>
-          <span class="comment"># MeshCue Forge generates everything</span><br>
-          <span class="output">&#10003;</span> <span class="file">diagram.json</span> <span class="dim">— Wokwi circuit (simulate in browser)</span><br>
-          <span class="output">&#10003;</span> <span class="file">main.ino</span> <span class="dim">— Arduino firmware (ready to compile)</span><br>
-          <span class="output">&#10003;</span> <span class="file">enclosure.scad</span> <span class="dim">— 3D printable snap-fit case</span><br>
-          <span class="output">&#10003;</span> <span class="file">platformio.ini</span> <span class="dim">— Build config</span><br>
-          <span class="output">&#10003;</span> <span class="file">bom.csv</span> <span class="dim">— Bill of materials</span><br>
-          <span class="output">&#10003;</span> <span class="file">PINOUT.md</span> <span class="dim">— GPIO reference</span><br>
-          <span class="output">&#10003;</span> <span class="file">ASSEMBLY.md</span> <span class="dim">— Step-by-step build guide</span><br>
-          <span class="output">&#10003;</span> <span class="file">PRINT_GUIDE.md</span> <span class="dim">— 3D print settings</span><br>
+          <span class="comment"># MeshCue Forge generates everything in 1ms</span><br>
+          <span class="check">&#10003;</span> <span class="file">diagram.json</span> <span class="dim">Wokwi circuit &mdash; simulate in browser</span><br>
+          <span class="check">&#10003;</span> <span class="file">main.ino</span> <span class="dim">Arduino firmware &mdash; ready to compile</span><br>
+          <span class="check">&#10003;</span> <span class="file">enclosure.scad</span> <span class="dim">3D printable snap-fit case</span><br>
+          <span class="check">&#10003;</span> <span class="file">platformio.ini</span> <span class="dim">Build configuration</span><br>
+          <span class="check">&#10003;</span> <span class="file">bom.csv</span> <span class="dim">Bill of materials</span><br>
+          <span class="check">&#10003;</span> <span class="file">PINOUT.md</span> <span class="dim">GPIO reference</span><br>
+          <span class="check">&#10003;</span> <span class="file">ASSEMBLY.md</span> <span class="dim">Step-by-step build guide</span><br>
+          <span class="check">&#10003;</span> <span class="file">PRINT_GUIDE.md</span> <span class="dim">3D print settings</span><br>
           <br>
-          <span class="comment"># Build time: 1ms</span>
+          <span class="time">Build complete &mdash; 1ms &mdash; 8 artifacts generated</span>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- Features -->
   <section class="features" id="features">
     <div class="container">
       <div class="section-label">Features</div>
       <div class="section-title">From description to device</div>
+      <div class="section-subtitle">One spec, one command, one complete hardware project.</div>
       <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(34,211,238,0.1); color: var(--accent);">&#9889;</div>
+        <div class="feature-card" style="--card-accent: var(--violet);">
+          <div class="feature-icon" style="background: rgba(139,92,246,0.12); color: var(--violet);">&#9889;</div>
           <h3>MHDL Standard</h3>
           <p>One YAML/JSON file describes your entire hardware project. Git-friendly diffs, team-friendly workflows, AI-friendly structure.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(74,222,128,0.1); color: var(--green);">&#10004;</div>
+        <div class="feature-card" style="--card-accent: var(--green);">
+          <div class="feature-icon" style="background: rgba(74,222,128,0.12); color: var(--green);">&#10004;</div>
           <h3>Design Rule Checks</h3>
           <p>Pin conflicts, I2C collisions, power budget, connection integrity, enclosure fit, mounting alignment — validated on every build.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(167,139,250,0.1); color: var(--accent2);">&#9881;</div>
+        <div class="feature-card" style="--card-accent: var(--fuchsia);">
+          <div class="feature-icon" style="background: rgba(217,70,239,0.12); color: var(--fuchsia);">&#9881;</div>
           <h3>Pluggable Backends</h3>
-          <p>Wokwi, Arduino, OpenSCAD, KiCad by default. Swap in MicroPython, CadQuery, FreeCAD, or EasyEDA. Your choice.</p>
+          <p>Wokwi, Arduino, OpenSCAD, KiCad by default. Swap in MicroPython, CadQuery, FreeCAD, or EasyEDA.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(250,204,21,0.1); color: var(--yellow);">&#9675;</div>
+        <div class="feature-card" style="--card-accent: var(--orange);">
+          <div class="feature-icon" style="background: rgba(245,158,11,0.12); color: var(--orange);">&#9726;</div>
           <h3>3D Print Ready</h3>
-          <p>Auto-generated parametric enclosures with snap-fit clips, screw mounts, cutouts for USB/LEDs/buttons, ventilation, and embossed labels.</p>
+          <p>Auto-generated parametric enclosures with snap-fit clips, screw mounts, cutouts, ventilation, and embossed labels.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(248,113,113,0.1); color: var(--red);">&#9879;</div>
+        <div class="feature-card" style="--card-accent: var(--cyan);">
+          <div class="feature-icon" style="background: rgba(34,211,238,0.12); color: var(--cyan);">&#9879;</div>
           <h3>MCP Native</h3>
-          <p>Works with Claude, GPT, Gemini, and any MCP-compatible AI client. Hardware design as a conversation.</p>
+          <p>Works with Claude, GPT, Gemini, and any MCP-compatible AI. Hardware design as a conversation.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background: rgba(34,211,238,0.1); color: var(--accent);">&#10697;</div>
+        <div class="feature-card" style="--card-accent: var(--violet);">
+          <div class="feature-icon" style="background: rgba(139,92,246,0.12); color: var(--violet);">&#10697;</div>
           <h3>Full Pipeline</h3>
-          <p>Circuit simulation, firmware generation, PCB export, enclosure design, BOM sourcing, and documentation — one command.</p>
+          <p>Circuit, firmware, PCB, enclosure, BOM, and documentation — all from one command, in under a millisecond.</p>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- How It Works -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="container">
+      <div class="section-label">How It Works</div>
+      <div class="section-title">Three steps to hardware</div>
+      <div class="section-subtitle">From idea to 3D-printable device in seconds.</div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <div class="step-content">
+            <h3>Describe your hardware</h3>
+            <p>Tell the AI what you want to build in plain English. MeshCue Forge generates a complete MHDL spec with auto-assigned GPIOs, connections, and enclosure cutouts.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <div class="step-content">
+            <h3>Build all artifacts</h3>
+            <p>One command generates Wokwi circuits, Arduino firmware, OpenSCAD enclosures, BOM, pinout docs, assembly instructions, and 3D print guides.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <div class="step-content">
+            <h3>Simulate, print, assemble</h3>
+            <p>Test in Wokwi, 3D print the case, flash the firmware, screw it together. A real device from a single description.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tools -->
   <section class="tools" id="tools">
     <div class="container">
       <div class="section-label">MCP Tools</div>
       <div class="section-title">Four tools, infinite hardware</div>
+      <div class="section-subtitle">Expose these to any AI client via Model Context Protocol.</div>
       <div class="tools-grid">
         <div class="tool-card">
           <div class="tool-name">meshforge-describe</div>
-          <div class="tool-desc">Natural language to MHDL spec. Describe your board, get a buildable hardware definition.</div>
+          <div class="tool-desc">Natural language to MHDL spec. Describe your board, get a buildable hardware definition with auto-assigned pins and connections.</div>
         </div>
         <div class="tool-card">
           <div class="tool-name">meshforge-build</div>
-          <div class="tool-desc">MHDL to all artifacts. Circuit, firmware, enclosure, BOM, and docs in one call.</div>
+          <div class="tool-desc">MHDL to all artifacts. Circuit, firmware, enclosure, BOM, and documentation generated in one call.</div>
         </div>
         <div class="tool-card">
           <div class="tool-name">meshforge-validate</div>
-          <div class="tool-desc">6 Design Rule Checks. Nothing ships without passing validation.</div>
+          <div class="tool-desc">6 Design Rule Checks run automatically. Pin conflicts, power budget, I2C collisions — nothing ships without passing.</div>
         </div>
         <div class="tool-card">
           <div class="tool-name">meshforge-iterate</div>
-          <div class="tool-desc">Patch and rebuild. Change the enclosure, swap the MCU, add components — instant rebuild.</div>
+          <div class="tool-desc">Patch and rebuild. Change the enclosure type, swap the MCU, add a sensor — instant rebuild from the updated spec.</div>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- Flagship -->
   <section class="flagship" id="flagship">
     <div class="container">
       <div class="section-label">Flagship Project</div>
       <div class="section-title">MeshCue Node</div>
+      <div class="section-subtitle">A complete mesh networking device — designed and built entirely with Forge.</div>
       <div class="flagship-box">
         <div>
-          <h2>Built entirely with Forge</h2>
+          <h2>Proof it works</h2>
           <p>
             A dedicated mesh networking node — always-on, 3D printed, running on ESP32-S3.
             Relays signals, participates in consensus, displays live mesh status.
@@ -531,31 +903,52 @@
         </div>
         <div>
           <ul class="artifacts-list">
-            <li><span>&#10003;</span> meshcue-node.mhdl.json</li>
-            <li><span>&#10003;</span> diagram.json — Wokwi circuit</li>
-            <li><span>&#10003;</span> main.ino — Arduino firmware</li>
-            <li><span>&#10003;</span> enclosure.scad — 3D printable case</li>
-            <li><span>&#10003;</span> platformio.ini — build config</li>
-            <li><span>&#10003;</span> bom.csv — bill of materials</li>
-            <li><span>&#10003;</span> PINOUT.md — GPIO reference</li>
-            <li><span>&#10003;</span> ASSEMBLY.md — build instructions</li>
-            <li><span>&#10003;</span> PRINT_GUIDE.md — print settings</li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">meshcue-node.mhdl.json</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">diagram.json</span> <span class="li-desc">Wokwi circuit</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">main.ino</span> <span class="li-desc">Arduino firmware</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">enclosure.scad</span> <span class="li-desc">3D printable case</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">platformio.ini</span> <span class="li-desc">build config</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">bom.csv</span> <span class="li-desc">bill of materials</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">PINOUT.md</span> <span class="li-desc">GPIO reference</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">ASSEMBLY.md</span> <span class="li-desc">build instructions</span></li>
+            <li><span class="li-check">&#10003;</span> <span class="li-file">PRINT_GUIDE.md</span> <span class="li-desc">print settings</span></li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- CTA -->
+  <section class="cta">
+    <div class="container">
+      <div class="cta-box">
+        <h2>Start building hardware with AI</h2>
+        <p>MeshCue Forge is free, open source, and ready to use today.</p>
+        <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-primary">Get Started on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
   <footer>
     <div class="container">
-      <p>
-        MIT Licensed &middot;
-        Built by <a href="https://tinkclaw.com">TinkClaw</a> &middot;
-        <a href="https://github.com/TinkClaw/meshcue-forge">GitHub</a> &middot;
-        <a href="https://meshcue.com">meshcue.com</a>
-      </p>
+      <p>&copy; 2026 TinkClaw &middot; MIT License</p>
+      <div class="footer-links">
+        <a href="https://github.com/TinkClaw/meshcue-forge">GitHub</a>
+        <a href="https://meshcue.com">MeshCue</a>
+        <a href="https://tinkclaw.com">TinkClaw</a>
+      </div>
     </div>
   </footer>
+
+  <script>
+    function copyInstall(btn) {
+      navigator.clipboard.writeText('npm install @meshcue/forge');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    }
+  </script>
 
 </body>
 </html>
