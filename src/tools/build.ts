@@ -41,6 +41,15 @@ import { generateKiCadPCB } from "../backends/pcb/kicad.js";
 import { generateHunyuan3DModel } from "../backends/visualization/hunyuan3d.js";
 import { generateCosmosVideo } from "../backends/visualization/cosmos.js";
 
+// Medical regulatory docs
+import {
+  generateWHOChecklist,
+  generateIEC62304Doc,
+  generateFMEATemplate,
+  generateCEGuidance,
+  generateBatteryLifeEstimate,
+} from "../backends/docs/medical.js";
+
 // ─── Stage Types ─────────────────────────────────────────────
 
 export type BuildStage =
@@ -183,6 +192,97 @@ function generatePrintGuide(doc: MHDLDocument): BuildArtifact {
   lines.push(`## Post-Processing`);
   lines.push(`- Sand mating surfaces lightly if snap-fit is too tight`);
   lines.push(`- Adjust \`tolerance\` parameter in .scad file (default 0.3mm)`);
+
+  // ── Medical Device Print Considerations ──────────
+  if (doc.meta.medical) {
+    lines.push(``);
+    lines.push(`## Medical Device Print Considerations`);
+    lines.push(``);
+    lines.push(`> This enclosure is flagged as a medical device${doc.meta.deviceClass ? " (Class " + doc.meta.deviceClass + ")" : ""}.`);
+    lines.push(`> Follow all applicable regulatory requirements for your jurisdiction.`);
+    if (doc.meta.intendedUse) {
+      lines.push(`> Intended use: ${doc.meta.intendedUse}`);
+    }
+    lines.push(``);
+
+    // Material selection based on sterilization
+    lines.push(`### Material Selection`);
+    lines.push(``);
+    if (enc.sterilization === "autoclave") {
+      lines.push(`- **Sterilization method: Autoclave (134°C)**`);
+      lines.push(`  - Use **PEEK**, **PP (polypropylene)**, or **Nylon** only`);
+      lines.push(`  - PLA and PETG will deform at autoclave temperatures`);
+      lines.push(`  - ABS may warp; not recommended for repeated autoclaving`);
+    } else if (enc.sterilization === "chemical") {
+      lines.push(`- **Sterilization method: Chemical (IPA / quaternary ammonium)**`);
+      lines.push(`  - **PETG** or **PP** recommended — good chemical resistance`);
+      lines.push(`  - PLA may degrade with repeated chemical exposure`);
+      lines.push(`  - ABS is acceptable but may yellow over time`);
+    } else if (enc.sterilization === "uv") {
+      lines.push(`- **Sterilization method: UV-C**`);
+      lines.push(`  - Most materials acceptable`);
+      lines.push(`  - **PETG** or **PC (polycarbonate)** recommended for UV stability`);
+      lines.push(`  - Ensure UV-C can reach all surfaces — consider adding a UV indicator window`);
+    } else {
+      lines.push(`- No sterilization method specified`);
+      lines.push(`  - **PETG** recommended as a general-purpose medical-grade material`);
+    }
+
+    if (enc.biocompatible) {
+      lines.push(`- **Biocompatible (patient contact)**: Use **PETG**, **PP**, or **medical-grade silicone**`);
+      if (enc.material === "pla") {
+        lines.push(`  - WARNING: Current material (PLA) is NOT biocompatible for patient contact`);
+      }
+    }
+    lines.push(``);
+
+    // Print parameters for medical
+    lines.push(`### Print Parameters (Medical)`);
+    lines.push(``);
+    lines.push(`| Setting | Value | Reason |`);
+    lines.push(`|---------|-------|--------|`);
+    lines.push(`| Layer Height | **0.1mm** | Smooth surfaces for patient contact & easier cleaning |`);
+    lines.push(`| Infill | **100%** | Structural integrity required for medical devices |`);
+    lines.push(`| Perimeters | 4+ | Maximize shell strength |`);
+    lines.push(`| Top/Bottom layers | 6+ | Fully sealed top and bottom |`);
+    lines.push(``);
+
+    // Post-processing for medical
+    lines.push(`### Post-Processing (Medical)`);
+    lines.push(``);
+    lines.push(`- Sand ALL external surfaces to **400 grit minimum** for smooth finish`);
+    lines.push(`- Remove all layer lines from patient-contact surfaces`);
+    lines.push(`- Inspect for gaps, voids, or incomplete layers — reject if found`);
+    lines.push(`- Consider vapor smoothing (ABS) or annealing (PETG) for improved surface quality`);
+    lines.push(``);
+
+    // IP rating section
+    if (enc.ipRating) {
+      const grooveDepth = enc.gasketGrooveMm || 1.2;
+      lines.push(`### IP Rating: ${enc.ipRating}`);
+      lines.push(``);
+
+      const ipNum = parseInt(enc.ipRating.replace("IP", ""), 10);
+      if (ipNum >= 54) {
+        lines.push(`- **Gasket/O-ring required** for ${enc.ipRating} sealing`);
+        lines.push(`  - Groove width: 1.5mm`);
+        lines.push(`  - Groove depth: ${grooveDepth}mm`);
+        lines.push(`  - Use **2mm silicone O-ring** (durometer 40A-50A)`);
+        lines.push(`  - O-ring inner perimeter should match groove path length`);
+      }
+      if (ipNum >= 65) {
+        lines.push(`- Ensure all cable entries use **waterproof cable glands** (PG7/PG9/PG11)`);
+        lines.push(`- Test with water spray / submersion per IEC 60529 requirements`);
+      }
+      if (enc.cableGland) {
+        let pgSize = "PG7";
+        if (enc.cableGland.diameterMm > 12) pgSize = "PG11";
+        else if (enc.cableGland.diameterMm > 7) pgSize = "PG9";
+        lines.push(`- Cable glands: ${enc.cableGland.count}x ${pgSize} (${enc.cableGland.diameterMm}mm diameter)`);
+      }
+      lines.push(``);
+    }
+  }
 
   return {
     stage: "docs",
@@ -435,6 +535,16 @@ export async function build(
     if (doc.docs?.generatePinout) artifacts.push(generatePinoutDoc(doc));
     if (doc.docs?.generateAssembly) artifacts.push(generateAssemblyDoc(doc));
     if (doc.docs?.generatePrintGuide) artifacts.push(generatePrintGuide(doc));
+
+    // Medical regulatory docs — auto-generate when meta.medical is true
+    if (doc.meta?.medical || doc.docs?.generateMedicalDocs) {
+      artifacts.push(generateWHOChecklist(doc));
+      artifacts.push(generateIEC62304Doc(doc));
+      artifacts.push(generateFMEATemplate(doc));
+      artifacts.push(generateCEGuidance(doc));
+      artifacts.push(generateBatteryLifeEstimate(doc));
+    }
+
     emit({ stage: "docs", status: "done", durationMs: Date.now() - t });
   }
 

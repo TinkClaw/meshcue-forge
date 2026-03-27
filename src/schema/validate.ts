@@ -9,6 +9,7 @@ import type {
   MHDLDocument,
   ValidationResult,
   ValidationIssue,
+  MedicalStats,
 } from "./mhdl.js";
 
 // ─── Known current draws (mA) ────────────────────────────────
@@ -575,6 +576,251 @@ function checkPCBConstraints(doc: MHDLDocument): ValidationIssue[] {
   return issues;
 }
 
+// ─── Medical Device Safety Checks ────────────────────────────
+
+/** IP rating numeric value for comparison */
+const IP_RATING_VALUE: Record<string, number> = {
+  IP20: 20,
+  IP44: 44,
+  IP54: 54,
+  IP65: 65,
+  IP67: 67,
+  IP68: 68,
+};
+
+function checkMedicalSafety(doc: MHDLDocument, issues: ValidationIssue[]): number {
+  let checksRun = 0;
+
+  // (a) Patient isolation — mains/high-voltage without isolation
+  checksRun++;
+  const hasMainsPower = doc.board.power.source === "dc-jack" || doc.board.power.voltageIn > 48;
+  const hasIsolation = doc.board.components.some(
+    (c) =>
+      c.id.toLowerCase().includes("isolat") ||
+      c.type === "custom" && c.properties?.["isolation"] === true
+  );
+  if (hasMainsPower && !hasIsolation) {
+    issues.push({
+      severity: "error",
+      code: "MED_PATIENT_ISOLATION",
+      message:
+        "Medical device has mains/high-voltage power without patient isolation — patient-applied parts must be isolated from mains per IEC 60601-1",
+      path: "board.power",
+      fix: "Add galvanic isolation (optocouplers, isolated DC-DC converter) between mains and patient-applied circuits",
+    });
+  }
+
+  // (b) Alarm requirements — no buzzer or speaker
+  checksRun++;
+  const hasBuzzerOrSpeaker = doc.board.components.some(
+    (c) => c.type === "buzzer" || c.type === "speaker"
+  );
+  if (!hasBuzzerOrSpeaker) {
+    issues.push({
+      severity: "warning",
+      code: "MED_NO_ALARM",
+      message:
+        "No buzzer or speaker component present — medical monitoring devices should have audible alarms per IEC 60601-1-8",
+      path: "board.components",
+      fix: "Add a buzzer or speaker component for audible alarm capability",
+    });
+  }
+
+  // (c) Battery backup — mains-powered without battery
+  checksRun++;
+  const isMainsPowered = doc.board.power.source === "dc-jack" || doc.board.power.source === "usb";
+  const hasBatteryBackup =
+    doc.board.power.source === "battery" ||
+    doc.board.power.batteryMah !== undefined ||
+    doc.board.components.some((c) => c.id.toLowerCase().includes("battery") || c.id.toLowerCase().includes("ups"));
+  if (isMainsPowered && !hasBatteryBackup) {
+    issues.push({
+      severity: "warning",
+      code: "MED_NO_BATTERY_BACKUP",
+      message:
+        "Device is mains-powered without battery backup — critical medical devices need UPS/battery continuity",
+      path: "board.power",
+      fix: "Add a battery backup (LiPo + charging circuit) for power continuity during outages",
+    });
+  }
+
+  // (d) Biocompatibility — PLA not suitable for patient contact
+  checksRun++;
+  if (doc.enclosure.biocompatible === true && doc.enclosure.material === "pla") {
+    issues.push({
+      severity: "warning",
+      code: "MED_PLA_BIOCOMPAT",
+      message:
+        "Enclosure marked biocompatible but material is PLA — PLA is not suitable for patient contact. Recommend PETG, PP, or medical-grade materials",
+      path: "enclosure.material",
+      fix: "Change enclosure material to PETG, PP, PC, PEEK, or medical-grade silicone",
+    });
+  }
+
+  // (e) Sterilization compatibility — PLA/PETG cannot survive autoclave
+  checksRun++;
+  if (doc.enclosure.sterilization === "autoclave") {
+    const mat = doc.enclosure.material;
+    if (mat === "pla" || mat === "petg") {
+      issues.push({
+        severity: "error",
+        code: "MED_AUTOCLAVE_MATERIAL",
+        message: `Enclosure material "${mat}" cannot withstand autoclave temperatures (121-134°C) — will deform. Must use PEEK, PP, or Nylon`,
+        path: "enclosure.material",
+        fix: "Change material to PEEK, PP, or Nylon for autoclave sterilization compatibility",
+      });
+    }
+  }
+
+  // (f) Display readability — OLED/LCD without brightness consideration
+  checksRun++;
+  const hasDisplay = doc.board.components.some(
+    (c) => c.type === "oled" || c.type === "lcd"
+  );
+  if (hasDisplay) {
+    const hasBacklightConfig = doc.board.components.some(
+      (c) =>
+        (c.type === "oled" || c.type === "lcd") &&
+        (c.properties?.["backlight"] !== undefined ||
+          c.properties?.["brightness"] !== undefined ||
+          c.properties?.["minFontSize"] !== undefined)
+    );
+    if (!hasBacklightConfig) {
+      issues.push({
+        severity: "warning",
+        code: "MED_DISPLAY_READABILITY",
+        message:
+          "OLED/LCD display present without backlight/brightness configuration — clinical environments require high-visibility displays. Recommend specifying minimum font size",
+        path: "board.components",
+        fix: "Add brightness/backlight and minFontSize properties to the display component for clinical readability",
+      });
+    }
+  }
+
+  // (g) Data logging — monitoring device without data export
+  checksRun++;
+  const hasSensors = doc.board.components.some((c) => c.type === "sensor" || c.type === "temperature_sensor" || c.type === "thermocouple" || c.type === "gas_sensor");
+  const hasDataExport = doc.board.components.some(
+    (c) =>
+      c.id.toLowerCase().includes("sd") ||
+      c.type === "custom" && c.properties?.["sdCard"] === true
+  );
+  const hasWirelessExport = doc.board.mcu.wireless && doc.board.mcu.wireless.length > 0;
+  const hasSDCutout = doc.enclosure.cutouts.some((c) => c.type === "sd-card");
+  if (hasSensors && !hasDataExport && !hasWirelessExport && !hasSDCutout) {
+    issues.push({
+      severity: "warning",
+      code: "MED_NO_DATA_LOGGING",
+      message:
+        "Monitoring device (has sensors) but no SD card or wireless data export — clinical data should be recorded",
+      path: "board.components",
+      fix: "Add an SD card module or enable wireless (WiFi/BLE) for clinical data logging",
+    });
+  }
+
+  // (h) Watchdog timer — firmware without watchdog
+  checksRun++;
+  const hasWatchdog =
+    doc.firmware.features?.some((f) => f.toLowerCase().includes("watchdog")) ||
+    doc.firmware.buildFlags?.some((f) => f.toLowerCase().includes("watchdog"));
+  if (!hasWatchdog) {
+    issues.push({
+      severity: "warning",
+      code: "MED_NO_WATCHDOG",
+      message:
+        "Firmware config does not mention watchdog — medical firmware should use a hardware watchdog timer for crash recovery",
+      path: "firmware",
+      fix: "Add 'watchdog' to firmware features or enable hardware watchdog in build flags",
+    });
+  }
+
+  // (i) Power indicator — no LED designated as power indicator
+  checksRun++;
+  const hasPowerLed = doc.board.components.some(
+    (c) =>
+      c.type === "led" &&
+      (c.id.toLowerCase().includes("power") ||
+        c.properties?.["role"] === "power" ||
+        c.properties?.["color"] === "green" && c.id.toLowerCase().includes("pwr"))
+  );
+  if (!hasPowerLed) {
+    issues.push({
+      severity: "warning",
+      code: "MED_NO_POWER_INDICATOR",
+      message:
+        "No LED designated as power indicator — users must know device is on",
+      path: "board.components",
+      fix: "Add an LED component with id containing 'power' or set properties.role to 'power'",
+    });
+  }
+
+  // (j) Low battery warning — battery-powered without low battery indication
+  checksRun++;
+  const isBatteryPowered =
+    doc.board.power.source === "battery" || doc.board.power.batteryMah !== undefined;
+  if (isBatteryPowered) {
+    const hasBatteryIndicator = doc.board.components.some(
+      (c) =>
+        (c.type === "led" || c.type === "buzzer") &&
+        (c.id.toLowerCase().includes("batt") || c.properties?.["role"] === "battery")
+    );
+    if (!hasBatteryIndicator) {
+      issues.push({
+        severity: "warning",
+        code: "MED_NO_LOW_BATTERY",
+        message:
+          "Battery-powered device without low battery indication (no LED or buzzer for battery state)",
+        path: "board.components",
+        fix: "Add an LED or buzzer designated for low battery warning (id containing 'battery' or properties.role = 'battery')",
+      });
+    }
+  }
+
+  // (k) EMC consideration — always an info note for medical devices
+  checksRun++;
+  issues.push({
+    severity: "info",
+    code: "MED_EMC_NOTE",
+    message:
+      "Medical devices require EMC testing per IEC 60601-1-2. Consider shielding for sensitive analog inputs (ECG, SpO2).",
+    path: "board",
+  });
+
+  // (l) Enclosure IP rating — should be at least IP44
+  checksRun++;
+  const ipRating = doc.enclosure.ipRating;
+  if (!ipRating || IP_RATING_VALUE[ipRating] < IP_RATING_VALUE["IP44"]) {
+    issues.push({
+      severity: "warning",
+      code: "MED_LOW_IP_RATING",
+      message: `Medical device enclosure ${ipRating ? `has IP rating ${ipRating}` : "has no IP rating set"} — minimum IP44 (splash-protected) recommended for medical devices`,
+      path: "enclosure.ipRating",
+      fix: "Set enclosure ipRating to at least IP44 for splash protection",
+    });
+  }
+
+  // (m) Tropical climate — operating temperature range
+  checksRun++;
+  const hasTemperatureRange = doc.board.components.some(
+    (c) =>
+      c.properties?.["operatingTempMin"] !== undefined ||
+      c.properties?.["operatingTempMax"] !== undefined
+  );
+  const metaHasTemp = doc.meta.tags?.some((t) => t.toLowerCase().includes("temperature-rated"));
+  if (!hasTemperatureRange && !metaHasTemp) {
+    issues.push({
+      severity: "warning",
+      code: "MED_NO_TEMP_RANGE",
+      message:
+        "Operating temperature range not specified — developing country deployments face 0-50°C ambient",
+      path: "board.components",
+      fix: "Specify operatingTempMin and operatingTempMax properties on critical components, or add 'temperature-rated' tag",
+    });
+  }
+
+  return checksRun;
+}
+
 // ─── Main Validator ──────────────────────────────────────────
 
 export function validate(doc: MHDLDocument): ValidationResult {
@@ -593,6 +839,12 @@ export function validate(doc: MHDLDocument): ValidationResult {
     ...checkComponentCompatibility(doc),
     ...checkPCBConstraints(doc),
   ];
+
+  // Medical safety checks — only run when medical flag is set
+  let medicalChecksRun = 0;
+  if (doc.meta?.medical === true) {
+    medicalChecksRun = checkMedicalSafety(doc, issues);
+  }
 
   // Calculate stats
   let estimatedCurrentMa = MCU_CURRENT[doc.board.mcu.family] || 100;
@@ -619,6 +871,28 @@ export function validate(doc: MHDLDocument): ValidationResult {
     0
   );
 
+  // Medical stats
+  let medicalStats: MedicalStats | undefined;
+  if (doc.meta?.medical === true) {
+    const medicalWarnings = issues.filter(
+      (i) => i.code.startsWith("MED_") && (i.severity === "warning" || i.severity === "error")
+    ).length;
+
+    // Rough battery hours estimate: common battery sizes / total current
+    let estimatedBatteryHours: number | undefined;
+    const batteryMah = doc.board.power.batteryMah;
+    if (batteryMah && estimatedCurrentMa > 0) {
+      estimatedBatteryHours = Math.round((batteryMah / estimatedCurrentMa) * 10) / 10;
+    }
+
+    medicalStats = {
+      medicalClass: doc.meta.deviceClass,
+      medicalChecks: medicalChecksRun,
+      medicalWarnings,
+      estimatedBatteryHours,
+    };
+  }
+
   return {
     valid: !issues.some((i) => i.severity === "error"),
     issues,
@@ -628,6 +902,7 @@ export function validate(doc: MHDLDocument): ValidationResult {
       pinUsage: totalPins > 0 ? Math.round((connectedPins.size / totalPins) * 100) : 0,
       estimatedCurrentMa,
       enclosureVolumeMm3,
+      ...(medicalStats ? { medical: medicalStats } : {}),
     },
   };
 }

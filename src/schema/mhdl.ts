@@ -164,6 +164,7 @@ export interface FirmwareConfig {
   boardId?: string;
   features?: string[];
   buildFlags?: string[];
+  estimatedBatteryHours?: number;
 }
 
 // ─── Enclosure ───────────────────────────────────────────────
@@ -180,6 +181,33 @@ export type EnclosureBackend =
   | "cadquery"
   | "zoo-cad"
   | "llama-mesh";
+
+export type IPRating = "IP20" | "IP44" | "IP54" | "IP65" | "IP67" | "IP68";
+
+export type SterilizationMethod = "none" | "chemical" | "uv" | "autoclave";
+
+export type EnclosureMaterial =
+  | "pla"
+  | "petg"
+  | "abs"
+  | "tpu"
+  | "pc"       // polycarbonate
+  | "peek"
+  | "silicone"
+  | "pp";      // polypropylene
+
+export interface CableGland {
+  count: number;
+  diameterMm: number;
+}
+
+export interface EnclosureSpec {
+  ipRating?: IPRating;
+  sterilization?: SterilizationMethod;
+  biocompatible?: boolean;
+  gasketGrooveMm?: number;
+  cableGland?: CableGland;
+}
 
 export type CutoutType =
   | "usb-c"
@@ -216,10 +244,17 @@ export interface EnclosureConfig {
   mounts: "m2-inserts" | "m3-inserts" | "snap-posts" | "standoffs";
   ventilation?: boolean;
   labelEmboss?: string;
-  material?: "pla" | "petg" | "abs" | "tpu";
+  material?: EnclosureMaterial;
   printOrientation?: "upright" | "flat" | "on-side";
   backend?: EnclosureBackend;
   organicShape?: string; // Natural language shape hint for AI backends
+
+  // Medical-grade enclosure features
+  ipRating?: IPRating;
+  sterilization?: SterilizationMethod;
+  biocompatible?: boolean;
+  gasketGrooveMm?: number;
+  cableGland?: CableGland;
 }
 
 // ─── PCB ────────────────────────────────────────────────────
@@ -277,6 +312,7 @@ export interface DocsConfig {
   generateAssembly: boolean;
   generateBOM: boolean;
   generatePrintGuide: boolean;
+  generateMedicalDocs?: boolean;
   readme?: boolean;
 }
 
@@ -291,6 +327,11 @@ export interface MHDLMeta {
   author?: string;
   url?: string;
   tags?: string[];
+
+  // Medical device metadata
+  medical?: boolean;
+  deviceClass?: "I" | "IIa" | "IIb" | "III";
+  intendedUse?: string;
 }
 
 // ─── Root MHDL Document ──────────────────────────────────────
@@ -318,6 +359,13 @@ export interface ValidationIssue {
   fix?: string;
 }
 
+export interface MedicalStats {
+  medicalClass?: "I" | "IIa" | "IIb" | "III";
+  medicalChecks: number;
+  medicalWarnings: number;
+  estimatedBatteryHours?: number;
+}
+
 export interface ValidationResult {
   valid: boolean;
   issues: ValidationIssue[];
@@ -327,6 +375,7 @@ export interface ValidationResult {
     pinUsage: number;
     estimatedCurrentMa: number;
     enclosureVolumeMm3: number;
+    medical?: MedicalStats;
   };
 }
 

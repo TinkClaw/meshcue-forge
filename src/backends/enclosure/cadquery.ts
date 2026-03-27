@@ -5,7 +5,7 @@
  * script that generates a 3D-printable STEP/STL enclosure.
  */
 
-import type { MHDLDocument, BuildArtifact, Cutout } from "../../schema/mhdl.js";
+import type { MHDLDocument, BuildArtifact, Cutout, IPRating } from "../../schema/mhdl.js";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -204,6 +204,99 @@ function generateLabel(text: string, caseW: number, caseD: number, wallT: number
   ].join("\n");
 }
 
+// ─── IP Rating Helpers ───────────────────────────────────────
+
+const IP_RATING_NUMERIC: Record<IPRating, number> = {
+  IP20: 20,
+  IP44: 44,
+  IP54: 54,
+  IP65: 65,
+  IP67: 67,
+  IP68: 68,
+};
+
+function ipRatingRequiresGasket(rating?: IPRating): boolean {
+  if (!rating) return false;
+  return IP_RATING_NUMERIC[rating] >= 54;
+}
+
+// ─── Gasket Groove (CadQuery) ────────────────────────────────
+
+function generateCQGasketGroove(
+  caseW: number,
+  caseH: number,
+  splitZ: number,
+  wallT: number,
+  grooveDepth: number,
+  ipRating: IPRating,
+): string {
+  const grooveWidth = 1.5;
+  const inset = wallT / 2;
+  const outerW = caseW - inset * 2;
+  const outerH = caseH - inset * 2;
+  const innerW = outerW - grooveWidth * 2;
+  const innerH = outerH - grooveWidth * 2;
+
+  const lines: string[] = [];
+  lines.push(`# ── O-ring groove for ${ipRating} sealing — use 2mm silicone O-ring`);
+  lines.push(`gasket_groove = (`);
+  lines.push(`    cq.Workplane("XY")`);
+  lines.push(`    .transformed(offset=(${caseW / 2}, ${caseH / 2}, ${splitZ - grooveDepth}))`);
+  lines.push(`    .rect(${outerW}, ${outerH})`);
+  lines.push(`    .rect(${innerW}, ${innerH})`);
+  lines.push(`    .extrude(${grooveDepth + 0.1})`);
+  lines.push(`)`);
+  lines.push(`lid = lid.cut(gasket_groove)`);
+  return lines.join("\n");
+}
+
+// ─── Cable Gland Holes (CadQuery) ───────────────────────────
+
+function generateCQCableGlandHoles(
+  count: number,
+  diameterMm: number,
+  caseW: number,
+  caseH: number,
+  caseD: number,
+  wallT: number,
+): string {
+  const spacing = caseW / (count + 1);
+  let pgSize = "PG7";
+  if (diameterMm > 12) pgSize = "PG11";
+  else if (diameterMm > 7) pgSize = "PG9";
+
+  const lines: string[] = [];
+  lines.push(`# ── Cable gland mount — use ${pgSize} waterproof gland`);
+
+  for (let i = 0; i < count; i++) {
+    const x = spacing * (i + 1) - caseW / 2;
+    lines.push(`base = (`);
+    lines.push(`    base`);
+    lines.push(`    .faces("+Y")`);
+    lines.push(`    .workplane()`);
+    lines.push(`    .moveTo(${x}, ${caseD / 2 - caseD / 2})`);
+    lines.push(`    .hole(${diameterMm}, ${wallT + 0.2})`);
+    lines.push(`)`);
+  }
+
+  return lines.join("\n");
+}
+
+// ─── Sterilization Comments (Python) ────────────────────────
+
+function sterilizationPythonComment(method?: string): string {
+  switch (method) {
+    case "chemical":
+      return "# Sterilization: Compatible with 70% IPA / quaternary ammonium wipes";
+    case "uv":
+      return "# Sterilization: Ensure UV-C exposure on all surfaces — add UV indicator window";
+    case "autoclave":
+      return "# Sterilization: WARNING: PLA/PETG will deform. Use PEEK, PP, or Nylon at 134°C";
+    default:
+      return "";
+  }
+}
+
 // ─── Main Generator ─────────────────────────────────────────
 
 export function generateCadQueryEnclosure(doc: MHDLDocument): BuildArtifact[] {
@@ -242,10 +335,41 @@ export function generateCadQueryEnclosure(doc: MHDLDocument): BuildArtifact[] {
   lines.push(`  Infill: 20%`);
   lines.push(`  Supports: ${enc.type === "snap-fit" ? "minimal" : "none"}`);
   lines.push(`  Orientation: ${enc.printOrientation || "upright"}`);
+
+  // Medical device header additions
+  if (doc.meta.medical) {
+    lines.push(``);
+    lines.push(`MEDICAL DEVICE — ${doc.meta.deviceClass ? "Class " + doc.meta.deviceClass : "Unclassified"}`);
+    if (doc.meta.intendedUse) {
+      lines.push(`Intended use: ${doc.meta.intendedUse}`);
+    }
+    if (enc.ipRating) {
+      lines.push(`IP Rating: ${enc.ipRating}`);
+    }
+    if (enc.sterilization && enc.sterilization !== "none") {
+      lines.push(`Sterilization: ${enc.sterilization}`);
+    }
+  }
+
   lines.push(`"""`);
   lines.push(``);
   lines.push(`import cadquery as cq`);
   lines.push(``);
+
+  // Sterilization compatibility notes
+  if (enc.sterilization && enc.sterilization !== "none") {
+    const sterComment = sterilizationPythonComment(enc.sterilization);
+    if (sterComment) {
+      lines.push(sterComment);
+      lines.push(``);
+    }
+  }
+
+  // Biocompatible material warnings
+  if (enc.biocompatible && enc.material === "pla") {
+    lines.push(`# WARNING: PLA is not biocompatible for patient contact. Use PETG, PP, or medical-grade silicone`);
+    lines.push(``);
+  }
 
   // ── Parameters ────────────────────────────────────
   lines.push(`# ── Parameters ─────────────────────────────────`);
@@ -280,6 +404,14 @@ export function generateCadQueryEnclosure(doc: MHDLDocument): BuildArtifact[] {
   lines.push(`)`);
   lines.push(``);
   lines.push(`shell = outer.cut(inner)`);
+
+  // Medical: fillet all external edges for patient safety
+  const isMedical = !!doc.meta.medical;
+  if (isMedical) {
+    lines.push(`# Medical device — fillet all external edges for patient safety`);
+    lines.push(`shell = shell.edges().fillet(1.0)`);
+  }
+
   lines.push(``);
 
   // ── Cutouts ───────────────────────────────────────
@@ -402,6 +534,24 @@ export function generateCadQueryEnclosure(doc: MHDLDocument): BuildArtifact[] {
   // ── Label emboss ──────────────────────────────────
   if (enc.labelEmboss) {
     lines.push(generateLabel(enc.labelEmboss, caseW, caseD, wallT));
+    lines.push(``);
+  }
+
+  // ── Gasket groove for IP-rated enclosures ─────────
+  const hasGasket = ipRatingRequiresGasket(enc.ipRating);
+  if (hasGasket && enc.ipRating) {
+    const grooveDepth = enc.gasketGrooveMm || 1.2;
+    lines.push(generateCQGasketGroove(caseW, caseH, splitZ, wallT, grooveDepth, enc.ipRating));
+    lines.push(``);
+  }
+
+  // ── Cable gland holes ────────────────────────────
+  if (enc.cableGland) {
+    lines.push(generateCQCableGlandHoles(
+      enc.cableGland.count,
+      enc.cableGland.diameterMm,
+      caseW, caseH, caseD, wallT,
+    ));
     lines.push(``);
   }
 

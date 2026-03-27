@@ -231,6 +231,179 @@ const TEMPLATES: Record<string, ComponentTemplate> = {
     ],
     currentMa: 150,
   },
+  sd_card: {
+    type: "sd_card" as ComponentType,
+    defaultPins: [
+      { id: "cs", mode: "digital-out" as PinMode },
+      { id: "mosi", mode: "digital-out" as PinMode },
+      { id: "miso", mode: "digital-in" as PinMode },
+      { id: "sck", mode: "digital-out" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    cutoutType: "sd-card" as CutoutType,
+    cutoutWall: "right",
+    currentMa: 100,
+  },
+  camera: {
+    type: "camera" as ComponentType,
+    defaultPins: [
+      { id: "sda", mode: "i2c-sda" as PinMode },
+      { id: "scl", mode: "i2c-scl" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    cutoutType: "custom-circle" as CutoutType,
+    cutoutWall: "front",
+    currentMa: 120,
+  },
+  rtc: {
+    type: "rtc" as ComponentType,
+    defaultPins: [
+      { id: "sda", mode: "i2c-sda" as PinMode },
+      { id: "scl", mode: "i2c-scl" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 2,
+  },
+  ble: {
+    type: "ble" as ComponentType,
+    defaultPins: [
+      { id: "tx", mode: "uart-tx" as PinMode },
+      { id: "rx", mode: "uart-rx" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 20,
+  },
+  gsm: {
+    type: "gsm" as ComponentType,
+    defaultPins: [
+      { id: "tx", mode: "uart-tx" as PinMode },
+      { id: "rx", mode: "uart-rx" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 500,
+  },
+  dac: {
+    type: "dac" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "analog-out" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 5,
+  },
+  load_cell: {
+    type: "load_cell" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "digital-in" as PinMode },
+      { id: "sck", mode: "digital-out" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 10,
+  },
+  color_sensor: {
+    type: "color_sensor" as ComponentType,
+    defaultPins: [
+      { id: "sda", mode: "i2c-sda" as PinMode },
+      { id: "scl", mode: "i2c-scl" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 10,
+  },
+  uv_led: {
+    type: "uv_led" as ComponentType,
+    defaultPins: [
+      { id: "sig", mode: "pwm" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 350,
+  },
+  fan: {
+    type: "fan" as ComponentType,
+    defaultPins: [
+      { id: "sig", mode: "digital-out" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 200,
+  },
+  flow_sensor: {
+    type: "flow_sensor" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "digital-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 10,
+  },
+  oxygen_sensor: {
+    type: "oxygen_sensor" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "analog-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 15,
+  },
+  pressure_sensor: {
+    type: "pressure_sensor" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "analog-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 10,
+  },
+  solar_controller: {
+    type: "solar_controller" as ComponentType,
+    defaultPins: [
+      { id: "sig", mode: "analog-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 20,
+  },
+  led_array: {
+    type: "led_array" as ComponentType,
+    defaultPins: [
+      { id: "sig", mode: "pwm" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 200,
+  },
+  co2_sensor: {
+    type: "co2_sensor" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "analog-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 30,
+  },
+  tds_sensor: {
+    type: "tds_sensor" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "analog-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 5,
+  },
+  ph_sensor: {
+    type: "ph_sensor" as ComponentType,
+    defaultPins: [
+      { id: "data", mode: "analog-in" as PinMode },
+      { id: "vcc", mode: "power" as PinMode },
+      { id: "gnd", mode: "ground" as PinMode },
+    ],
+    currentMa: 10,
+  },
 };
 
 // ─── MCU Templates ───────────────────────────────────────────
@@ -625,10 +798,75 @@ const PRODUCT_ARCHETYPES: Record<string, ProductArchetype> = {
   "cipher wheel": { mcu: "arduino-uno", components: [{ id: "potentiometer", type: "potentiometer" }, { id: "oled", type: "oled" }, { id: "btn_confirm", type: "button" }, { id: "buzzer", type: "buzzer" }, { id: "neopixel", type: "neopixel" }], power: "battery", keywords: ["cipher wheel", "decoder", "enigma", "crypto puzzle"] },
   "motion trigger prop": { mcu: "esp32-s3", components: [{ id: "pir", type: "pir" }, { id: "speaker", type: "speaker" }, { id: "neopixel", type: "neopixel" }, { id: "relay", type: "relay" }], power: "usb", keywords: ["motion trigger", "scare prop", "halloween", "haunted house", "jump scare"] },
   "treasure chest": { mcu: "esp32", components: [{ id: "servo", type: "servo" }, { id: "rfid", type: "rfid" }, { id: "neopixel", type: "neopixel" }, { id: "buzzer", type: "buzzer" }, { id: "btn_hint", type: "button" }, { id: "oled", type: "oled" }], power: "battery", keywords: ["treasure chest", "treasure box", "loot box", "pirate chest"] },
+
+  // ── Medical Devices (affordable, low-resource settings) ────
+
+  // Diagnostic devices
+  "pulse_oximeter": { mcu: "esp32", components: [{ id: "sensor_spo2", type: "sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_start", type: "button" }], power: "battery", enclosure: "petg", keywords: ["pulse oximeter", "oximeter", "spo2", "oxygen saturation", "blood oxygen", "finger clip"] },
+  "ecg_monitor": { mcu: "esp32", components: [{ id: "sensor_ecg", type: "sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_record", type: "button" }, { id: "sd_card", type: "sd_card" }], power: "battery", enclosure: "petg", keywords: ["ecg", "ekg", "electrocardiogram", "heart monitor", "cardiac monitor", "ad8232"] },
+  "blood_pressure": { mcu: "esp32", components: [{ id: "sensor_pressure", type: "pressure_sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_start", type: "button" }, { id: "motor_pump", type: "motor" }], power: "battery", enclosure: "petg", keywords: ["blood pressure", "bp monitor", "sphygmomanometer", "bp cuff", "systolic", "diastolic"] },
+  "glucometer": { mcu: "esp32", components: [{ id: "sensor_glucose", type: "sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_test", type: "button" }], power: "battery", enclosure: "petg", keywords: ["glucometer", "glucose", "blood sugar", "diabetes", "glucose meter", "strip reader"] },
+  "thermometer_clinical": { mcu: "esp32", components: [{ id: "sensor_temp_ir", type: "sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_measure", type: "button" }], power: "battery", enclosure: "petg", keywords: ["clinical thermometer", "ir thermometer", "forehead thermometer", "mlx90614", "ds18b20", "body temperature", "fever"] },
+  "stethoscope_digital": { mcu: "esp32", components: [{ id: "microphone", type: "microphone" }, { id: "speaker", type: "speaker" }, { id: "oled", type: "oled" }, { id: "btn_mode", type: "button" }, { id: "sd_card", type: "sd_card" }], power: "battery", enclosure: "petg", keywords: ["digital stethoscope", "electronic stethoscope", "heart sound", "lung sound", "auscultation"] },
+  "fetal_doppler": { mcu: "esp32", components: [{ id: "sensor_ultrasonic_tx", type: "sensor" }, { id: "speaker", type: "speaker" }, { id: "oled", type: "oled" }, { id: "btn_start", type: "button" }], power: "battery", enclosure: "petg", keywords: ["fetal doppler", "fetal heart", "baby heartbeat", "prenatal", "doppler ultrasound", "fetal monitor"] },
+  "malaria_detector": { mcu: "esp32", components: [{ id: "camera", type: "camera" }, { id: "led_illuminate", type: "led", color: "white" }, { id: "oled", type: "oled" }, { id: "btn_capture", type: "button" }], power: "battery", enclosure: "petg", keywords: ["malaria", "microscopy", "blood smear", "parasite detect", "malaria screen"] },
+  "urine_analyzer": { mcu: "esp32", components: [{ id: "color_sensor", type: "color_sensor" }, { id: "led_array", type: "led_array" }, { id: "oled", type: "oled" }, { id: "btn_test", type: "button" }], power: "battery", enclosure: "petg", keywords: ["urine analyzer", "urine test", "urinalysis", "dipstick reader", "urine strip"] },
+  "spirometer": { mcu: "esp32", components: [{ id: "sensor_diff_pressure", type: "pressure_sensor" }, { id: "oled", type: "oled" }, { id: "btn_blow", type: "button" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["spirometer", "lung capacity", "pulmonary", "fev1", "peak flow", "breathing test"] },
+
+  // Monitoring devices
+  "patient_monitor": { mcu: "esp32", components: [{ id: "sensor_spo2", type: "sensor" }, { id: "sensor_ecg", type: "sensor" }, { id: "sensor_temp", type: "sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_mode", type: "button" }], power: "battery", enclosure: "petg", keywords: ["patient monitor", "vital signs", "bedside monitor", "multi-parameter"] },
+  "cold_chain_monitor": { mcu: "esp32", components: [{ id: "sensor_temp", type: "sensor" }, { id: "sensor_humidity", type: "sensor" }, { id: "gps", type: "gps" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["cold chain", "vaccine storage", "vaccine cold chain", "cold box", "temperature logger"] },
+  "infant_warmer_controller": { mcu: "esp32", components: [{ id: "sensor_temp", type: "sensor" }, { id: "relay", type: "relay" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_set", type: "button" }], power: "battery", enclosure: "petg", keywords: ["infant warmer", "incubator", "neonatal warmer", "baby warmer", "kangaroo care", "incubator controller"] },
+  "oxygen_concentrator_controller": { mcu: "esp32", components: [{ id: "sensor_o2", type: "oxygen_sensor" }, { id: "sensor_flow", type: "flow_sensor" }, { id: "relay", type: "relay" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["oxygen concentrator", "o2 concentrator", "oxygen therapy", "supplemental oxygen"] },
+  "iv_drip_monitor": { mcu: "esp32", components: [{ id: "ir_emitter", type: "ir_emitter" }, { id: "ir_receiver", type: "ir_receiver" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "btn_set", type: "button" }], power: "battery", enclosure: "petg", keywords: ["iv drip", "infusion", "drip counter", "iv monitor", "infusion pump", "drip rate"] },
+  "blood_bank_monitor": { mcu: "esp32", components: [{ id: "sensor_temp", type: "sensor" }, { id: "sensor_humidity", type: "sensor" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }, { id: "relay", type: "relay" }], power: "battery", enclosure: "petg", keywords: ["blood bank", "blood storage", "blood refrigerator", "blood bag monitor"] },
+  "ambulance_tracker": { mcu: "esp32", components: [{ id: "gps", type: "gps" }, { id: "gsm", type: "gsm" }, { id: "buzzer", type: "buzzer" }, { id: "oled", type: "oled" }, { id: "btn_sos", type: "button" }], power: "battery", enclosure: "petg", keywords: ["ambulance tracker", "ambulance gps", "emergency vehicle", "ems tracker", "ambulance dispatch"] },
+
+  // Therapeutic devices
+  "nebulizer_controller": { mcu: "esp32", components: [{ id: "sensor_flow", type: "flow_sensor" }, { id: "relay", type: "relay" }, { id: "btn_start", type: "button" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["nebulizer", "nebuliser", "inhaler controller", "aerosol therapy", "breathing treatment"] },
+  "tens_unit": { mcu: "esp32", components: [{ id: "dac_output", type: "dac" }, { id: "btn_intensity", type: "button" }, { id: "potentiometer", type: "potentiometer" }, { id: "oled", type: "oled" }], power: "battery", enclosure: "petg", keywords: ["tens unit", "tens machine", "pain management", "electrotherapy", "muscle stimulator", "ems"] },
+  "uvb_therapy": { mcu: "esp32", components: [{ id: "uv_led_array", type: "uv_led" }, { id: "oled", type: "oled" }, { id: "btn_start", type: "button" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["uvb therapy", "phototherapy skin", "psoriasis", "vitiligo", "eczema light", "uv treatment"] },
+  "phototherapy_unit": { mcu: "esp32", components: [{ id: "led_blue_array", type: "led_array" }, { id: "ldr", type: "ldr" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["phototherapy", "jaundice", "neonatal jaundice", "bilirubin", "blue light therapy", "bili light"] },
+
+  // Field / community health devices
+  "community_health_kit": { mcu: "esp32", components: [{ id: "sensor_temp", type: "sensor" }, { id: "sensor_spo2", type: "sensor" }, { id: "sensor_weight", type: "load_cell" }, { id: "oled", type: "oled" }, { id: "btn_mode", type: "button" }, { id: "buzzer", type: "buzzer" }, { id: "sd_card", type: "sd_card" }], power: "battery", enclosure: "petg", keywords: ["community health", "chw kit", "health worker", "field clinic", "screening kit", "outreach kit"] },
+  "water_quality_tester_medical": { mcu: "esp32", components: [{ id: "sensor_tds", type: "tds_sensor" }, { id: "sensor_ph", type: "ph_sensor" }, { id: "sensor_temp", type: "sensor" }, { id: "oled", type: "oled" }, { id: "btn_test", type: "button" }, { id: "buzzer", type: "buzzer" }], power: "battery", enclosure: "petg", keywords: ["water quality medical", "safe water", "drinking water test", "water potability", "field water test"] },
+  "mosquito_trap_smart": { mcu: "esp32", components: [{ id: "uv_led", type: "uv_led" }, { id: "co2_sensor", type: "co2_sensor" }, { id: "fan", type: "fan" }, { id: "ir_counter", type: "ir_receiver" }, { id: "oled", type: "oled" }], power: "battery", enclosure: "petg", keywords: ["mosquito trap", "mosquito killer", "vector control", "dengue", "zika", "malaria prevention"] },
+  "solar_vaccine_fridge": { mcu: "esp32", components: [{ id: "sensor_temp", type: "sensor" }, { id: "relay", type: "relay" }, { id: "solar_ctrl", type: "solar_controller" }, { id: "oled", type: "oled" }, { id: "buzzer", type: "buzzer" }], power: "solar", enclosure: "petg", keywords: ["solar vaccine fridge", "solar refrigerator", "off grid fridge", "vaccine cold storage", "solar cooler"] },
+  "hand_wash_timer_medical": { mcu: "esp32", components: [{ id: "ultrasonic", type: "ultrasonic" }, { id: "led_array", type: "led_array" }, { id: "buzzer", type: "buzzer" }, { id: "oled", type: "oled" }], power: "battery", enclosure: "petg", keywords: ["medical hand wash", "surgical scrub timer", "hand hygiene", "infection control", "who hand wash"] },
+  "pill_dispenser": { mcu: "esp32", components: [{ id: "servo", type: "servo" }, { id: "rtc", type: "rtc" }, { id: "buzzer", type: "buzzer" }, { id: "oled", type: "oled" }, { id: "btn_dispense", type: "button" }], power: "battery", enclosure: "petg", keywords: ["pill dispenser", "medication dispenser", "drug dispenser", "medication adherence", "dose reminder", "pill organizer"] },
+  "hearing_screener": { mcu: "esp32", components: [{ id: "speaker", type: "speaker" }, { id: "microphone", type: "microphone" }, { id: "btn_respond", type: "button" }, { id: "oled", type: "oled" }], power: "battery", enclosure: "petg", keywords: ["hearing screener", "hearing test", "audiometer", "newborn hearing", "otoacoustic", "hearing screen"] },
+  "vision_screener": { mcu: "esp32", components: [{ id: "led_array", type: "led_array" }, { id: "btn_response", type: "button" }, { id: "oled", type: "oled" }], power: "battery", enclosure: "petg", keywords: ["vision screener", "eye test", "visual acuity", "snellen", "eye chart", "vision screen"] },
+  "blood_oxygen_logger": { mcu: "esp32", components: [{ id: "sensor_spo2", type: "sensor" }, { id: "sd_card", type: "sd_card" }, { id: "rtc", type: "rtc" }, { id: "oled", type: "oled" }, { id: "ble", type: "ble" }], power: "battery", enclosure: "petg", keywords: ["spo2 logger", "oxygen logger", "blood oxygen logger", "overnight oximetry", "sleep apnea", "long term spo2"] },
+  "ehr_terminal": { mcu: "esp32", components: [{ id: "rfid", type: "rfid" }, { id: "oled", type: "oled" }, { id: "btn_nav", type: "button" }, { id: "sd_card", type: "sd_card" }, { id: "ble", type: "ble" }], power: "battery", enclosure: "petg", keywords: ["ehr terminal", "electronic health record", "patient record", "health record", "emr terminal", "medical records"] },
 };
+
+// Medical keyword shortcuts — map common terms to medical archetypes
+const MEDICAL_KEYWORD_MAP: Array<{ patterns: string[]; archetype: string }> = [
+  { patterns: ["oximeter", "spo2"], archetype: "pulse_oximeter" },
+  { patterns: ["ecg", "electrocardiogram", "heart monitor", "ekg"], archetype: "ecg_monitor" },
+  { patterns: ["blood pressure", "bp monitor", "sphygmomanometer"], archetype: "blood_pressure" },
+  { patterns: ["glucose", "blood sugar", "glucometer"], archetype: "glucometer" },
+  { patterns: ["cold chain", "vaccine storage"], archetype: "cold_chain_monitor" },
+  { patterns: ["infant warmer", "incubator"], archetype: "infant_warmer_controller" },
+  { patterns: ["fetal", "doppler"], archetype: "fetal_doppler" },
+  { patterns: ["nebulizer", "nebuliser"], archetype: "nebulizer_controller" },
+  { patterns: ["iv drip", "infusion"], archetype: "iv_drip_monitor" },
+  { patterns: ["water quality", "water test"], archetype: "water_quality_tester_medical" },
+];
 
 function resolveArchetype(description: string): ProductArchetype | null {
   const desc = description.toLowerCase();
+
+  // Medical keyword shortcut — check early for better specificity
+  for (const entry of MEDICAL_KEYWORD_MAP) {
+    for (const pattern of entry.patterns) {
+      if (desc.includes(pattern)) {
+        const arch = PRODUCT_ARCHETYPES[entry.archetype];
+        if (arch) return arch;
+      }
+    }
+  }
 
   // Direct name match first
   for (const [name, arch] of Object.entries(PRODUCT_ARCHETYPES)) {
@@ -808,6 +1046,48 @@ function parseName(description: string): string {
     .slice(0, 3)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   return words.join("-") || "MeshCue Forge-Board";
+}
+
+// ─── Medical Device Detection ────────────────────────────────
+
+const MEDICAL_ARCHETYPE_NAMES = new Set([
+  "pulse_oximeter", "ecg_monitor", "blood_pressure", "glucometer",
+  "thermometer_clinical", "stethoscope_digital", "fetal_doppler",
+  "malaria_detector", "urine_analyzer", "spirometer",
+  "patient_monitor", "cold_chain_monitor", "infant_warmer_controller",
+  "oxygen_concentrator_controller", "iv_drip_monitor", "blood_bank_monitor",
+  "ambulance_tracker",
+  "nebulizer_controller", "tens_unit", "uvb_therapy", "phototherapy_unit",
+  "community_health_kit", "water_quality_tester_medical", "mosquito_trap_smart",
+  "solar_vaccine_fridge", "hand_wash_timer_medical", "pill_dispenser",
+  "hearing_screener", "vision_screener", "blood_oxygen_logger", "ehr_terminal",
+]);
+
+function isMedicalDevice(description: string, archetype: ProductArchetype | null): boolean {
+  const desc = description.toLowerCase();
+
+  // Check if the resolved archetype is medical
+  if (archetype) {
+    for (const [name, arch] of Object.entries(PRODUCT_ARCHETYPES)) {
+      if (arch === archetype && MEDICAL_ARCHETYPE_NAMES.has(name)) return true;
+    }
+  }
+
+  // Explicit medical keywords in description
+  const medicalKeywords = [
+    "medical", "clinical", "patient", "hospital", "diagnostic",
+    "health device", "healthcare", "biomedical", "vital signs",
+  ];
+  return medicalKeywords.some((kw) => desc.includes(kw));
+}
+
+// Estimate battery life based on total current draw (assumes 2000mAh 18650)
+function estimateBatteryHours(totalCurrentMa: number): number {
+  const batteryMah = 2000;
+  // Conservative: 80% efficiency for voltage regulation, 70% duty cycle
+  const effectiveMah = batteryMah * 0.8;
+  const avgCurrentMa = totalCurrentMa * 0.7; // duty cycle — not all sensors active simultaneously
+  return Math.round((effectiveMah / Math.max(avgCurrentMa, 1)) * 10) / 10;
 }
 
 // ─── Main Describe Function ─────────────────────────────────
@@ -992,6 +1272,63 @@ export function describe(naturalLanguage: string): MHDLDocument {
   }
   if (hasDHT) {
     doc.firmware.libraries.push({ name: "DHT", source: "arduino" });
+  }
+
+  // ── Medical device overrides ──────────────────────────────
+  const medical = isMedicalDevice(naturalLanguage, archetype);
+  if (medical) {
+    // Meta: flag as medical device
+    doc.meta.medical = true;
+    doc.meta.deviceClass = "I"; // Class I — lowest risk, no pre-market approval
+    doc.meta.tags = [...(doc.meta.tags || []), "medical", "low-resource", "affordable"];
+
+    // Enclosure: PETG, IP54 minimum, screw-close for dust/splash protection
+    doc.enclosure.material = "petg";
+    doc.enclosure.ipRating = "IP54";
+    doc.enclosure.type = "screw-close";
+    doc.enclosure.wallThicknessMm = 2.5; // slightly thicker for durability
+
+    // Power: battery-powered with conservative budget
+    const archetypePower = archetype?.power;
+    const isSolar = archetypePower === "solar";
+    doc.board.power.source = isSolar ? "solar" : "battery";
+    doc.board.power.voltageIn = isSolar ? 5 : 3.7; // LiPo/18650 nominal
+    doc.board.power.batteryMah = 2000; // standard 18650
+
+    // Conservative power budget for battery operation
+    const totalCurrentMa = components.reduce((sum, c) => {
+      const tmpl = Object.values(TEMPLATES).find((t) => t.type === c.type);
+      return sum + (tmpl?.currentMa || 10);
+    }, 80); // 80mA base for ESP32 idle with WiFi
+    doc.board.power.maxCurrentMa = Math.min(totalCurrentMa, powerBudget.maxCurrentMa);
+
+    // Firmware: battery life estimate and medical features
+    doc.firmware.estimatedBatteryHours = estimateBatteryHours(totalCurrentMa);
+    doc.firmware.features = [
+      ...(doc.firmware.features || []),
+      "low-power-sleep",
+      "wifi-data-reporting",
+      "battery-monitor",
+      "alarm-thresholds",
+    ];
+
+    // Medical-specific libraries
+    doc.firmware.libraries.push(
+      { name: "ESP32_BLE_Arduino", source: "arduino" },
+      { name: "ArduinoJson", source: "arduino" },
+    );
+
+    // Documentation: include medical docs
+    doc.docs = {
+      ...doc.docs!,
+      generateMedicalDocs: true,
+    };
+
+    // BOM: prefer globally available suppliers
+    doc.bom = {
+      auto: true,
+      preferredSuppliers: ["digikey", "mouser", "lcsc", "aliexpress"],
+    };
   }
 
   return doc;
