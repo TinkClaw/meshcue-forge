@@ -277,6 +277,49 @@ npm run format:check   # Prettier check
 - **Validation rules** -- more DRC checks (thermal analysis, signal integrity).
 - **MHDL schema extensions** -- new fields for advanced use cases.
 
+## MeshCue Connect
+
+MeshCue Connect is the patient communication layer — it closes the loop between medical devices, clinics, patients, and families.
+
+### What It Does
+
+- **Clinic-to-patient-to-family communication** — critical readings trigger alerts that flow from device to clinic to patient to family, automatically.
+- **Smart triage** — AI-powered keyword detection routes incoming messages by urgency (e.g., FEVER triggers nurse notification, HELP triggers emergency escalation, STOP triggers instant opt-out).
+- **Patient consent management** — patients opt in/out at any time via SMS or USSD. Consent state is tracked per-patient, per-channel.
+
+### Supported Channels
+
+| Channel | Provider | Notes |
+|---------|----------|-------|
+| SMS | Africa's Talking | Works on any phone, any network. No internet needed. |
+| USSD | Africa's Talking | Zero data cost. Patients dial *123# to report symptoms, request appointments, check results. |
+| WhatsApp | WhatsApp Business API | Rich messages with images, documents, and interactive buttons. |
+| Voice/IVR | Africa's Talking or Twilio | Automated voice calls for critical alerts. Supports text-to-speech in 9 languages. |
+
+### Languages
+
+9 languages supported: English, French, Swahili, Kinyarwanda, Lingala, Kirundi, Portuguese, Arabic, Spanish. Language is set per-patient and auto-detected from incoming messages.
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `meshcue-connect-alert` | Send a critical alert to patient + family + nurse based on device reading |
+| `meshcue-connect-send` | Send a message to a specific phone number via any channel |
+| `meshcue-connect-register` | Register a patient with phone, language, emergency contacts, and consent |
+| `meshcue-connect-inbox` | Retrieve incoming messages (symptoms, replies, opt-outs) |
+
+### Configuration
+
+All Connect environment variables are documented in [`.env.example`](.env.example). Key variables:
+
+- `MESHCUE_AT_API_KEY` / `MESHCUE_AT_USERNAME` — Africa's Talking credentials
+- `MESHCUE_WA_TOKEN` / `MESHCUE_WA_PHONE_ID` — WhatsApp Business API
+- `MESHCUE_VOICE_PROVIDER` — `"africastalking"` or `"twilio"`
+- `MESHCUE_DEFAULT_CHANNEL` — Default delivery channel (`sms`, `whatsapp`, `voice`)
+- `MESHCUE_DEFAULT_LANGUAGE` — Default language code (`en`, `fr`, `sw`, `rw`, `ln`, `rn`, `pt`, `ar`, `es`)
+- `MESHCUE_ESCALATION_PHONE` — Fallback phone number for critical alerts when primary contacts fail
+
 ## Known Limitations
 
 - **Keyword-based NL parsing**: The `meshforge-describe` tool uses keyword matching, not a full NLU model. Complex or ambiguous descriptions may produce incomplete specs. Iterate with `meshforge-iterate` to refine.

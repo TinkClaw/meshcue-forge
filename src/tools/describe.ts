@@ -1081,6 +1081,41 @@ function isMedicalDevice(description: string, archetype: ProductArchetype | null
   return medicalKeywords.some((kw) => desc.includes(kw));
 }
 
+// ─── MeshCue Connect — Default Alert Thresholds ─────────────
+
+/** Resolve the archetype string key from a resolved archetype reference. */
+function resolveArchetypeName(archetype: ProductArchetype | null): string | null {
+  if (!archetype) return null;
+  for (const [name, arch] of Object.entries(PRODUCT_ARCHETYPES)) {
+    if (arch === archetype) return name;
+  }
+  return null;
+}
+
+/** Default Connect alert thresholds keyed by archetype name. */
+const CONNECT_ALERT_THRESHOLDS: Record<string, Record<string, { warning: number; critical: number }>> = {
+  pulse_oximeter: {
+    spo2_low: { warning: 94, critical: 90 },
+  },
+  ecg_monitor: {
+    hr_high: { warning: 100, critical: 120 },
+    hr_low: { warning: 60, critical: 50 },
+  },
+  thermometer_clinical: {
+    temp_high: { warning: 38.5, critical: 40 },
+  },
+  blood_pressure: {
+    systolic_high: { warning: 140, critical: 180 },
+  },
+  cold_chain_monitor: {
+    temp_high: { warning: 8, critical: 15 },
+  },
+  infant_warmer_controller: {
+    temp_low: { warning: 35, critical: 34 },
+    temp_high: { warning: 37.5, critical: 38 },
+  },
+};
+
 // Estimate battery life based on total current draw (assumes 2000mAh 18650)
 function estimateBatteryHours(totalCurrentMa: number): number {
   const batteryMah = 2000;
@@ -1329,6 +1364,18 @@ export function describe(naturalLanguage: string): MHDLDocument {
       auto: true,
       preferredSuppliers: ["digikey", "mouser", "lcsc", "aliexpress"],
     };
+
+    // ── MeshCue Connect — auto-enable for medical devices ──
+    doc.firmware.connectEnabled = true;
+    doc.meta.connectEnabled = true;
+    doc.firmware.connectGatewayUrl = "https://connect.meshcue.com";
+    doc.firmware.connectDeviceId = `${name.replace(/\s+/g, "-").toLowerCase()}-${Date.now().toString(36)}`;
+
+    // Set alert thresholds based on device type
+    const archetypeName = resolveArchetypeName(archetype);
+    if (archetypeName && CONNECT_ALERT_THRESHOLDS[archetypeName]) {
+      doc.firmware.connectAlertThresholds = CONNECT_ALERT_THRESHOLDS[archetypeName];
+    }
   }
 
   return doc;

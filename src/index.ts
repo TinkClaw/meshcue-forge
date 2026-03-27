@@ -1,15 +1,24 @@
 #!/usr/bin/env node
 
 /**
- * MeshCue Forge MCP Server
+ * MeshCue Forge + Connect MCP Server
  *
  * The hardware compiler — describe it, build it, print it.
+ * Plus patient messaging — alerts, triage, and multi-channel delivery.
  *
- * Exposes 4 tools via Model Context Protocol:
+ * Forge tools:
  *   1. meshforge-describe  — natural language → MHDL spec
  *   2. meshforge-build     — MHDL → circuit + firmware + enclosure + docs
  *   3. meshforge-validate  — run DRC checks on an MHDL spec
  *   4. meshforge-iterate   — patch an MHDL spec and rebuild
+ *   5. meshforge-capabilities — detect available backends
+ *
+ * Connect tools:
+ *   6. meshcue-connect-alert    — process device alert → triage + messages
+ *   7. meshcue-connect-send     — send templated message to patient/contact
+ *   8. meshcue-connect-register — register patient for Connect messaging
+ *   9. meshcue-connect-inbox    — process incoming patient message
+ *  10. meshcue-connect-status   — check channel availability and queue
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -21,6 +30,7 @@ import { build, type BuildStage, type BuildProgress } from "./tools/build.js";
 import { validate } from "./schema/validate.js";
 import { loadConfig, detectCapabilities } from "./config.js";
 import type { MHDLDocument } from "./schema/mhdl.js";
+import { registerConnectTools } from "./connect/mcp.js";
 
 // ─── Server Setup ────────────────────────────────────────────
 
@@ -391,6 +401,10 @@ server.tool(
   },
 );
 
+// ─── Connect Tools ───────────────────────────────────────────
+
+registerConnectTools(server);
+
 // ─── Utility: Deep Merge ─────────────────────────────────────
 
 function deepMerge(target: unknown, source: unknown): unknown {
@@ -435,7 +449,7 @@ function deepMerge(target: unknown, source: unknown): unknown {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MeshCue Forge MCP server running — forge.meshcue.com");
+  console.error("MeshCue Forge + Connect MCP server running — forge.meshcue.com");
 }
 
 main().catch((err) => {

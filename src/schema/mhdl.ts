@@ -170,6 +170,10 @@ export interface FirmwareConfig {
   features?: string[];
   buildFlags?: string[];
   estimatedBatteryHours?: number;
+  connectEnabled?: boolean;            // auto-include MeshCue Connect client in firmware
+  connectGatewayUrl?: string;          // Connect gateway URL for HTTP alerts
+  connectDeviceId?: string;            // unique device ID for tracking
+  connectAlertThresholds?: Record<string, { warning: number; critical: number }>;
 }
 
 // ─── Enclosure ───────────────────────────────────────────────
@@ -338,6 +342,7 @@ export interface MHDLMeta {
   medical?: boolean;
   deviceClass?: "I" | "IIa" | "IIb" | "III";
   intendedUse?: string;
+  connectEnabled?: boolean;
 }
 
 // ─── Root MHDL Document ──────────────────────────────────────

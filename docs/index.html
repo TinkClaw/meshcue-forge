@@ -432,9 +432,95 @@
       padding: 4px 12px; border-radius: 100px;
     }
 
+    /* ── Connect Section ─────────────────── */
+    .connect-section { padding: 80px 0 60px; }
+    .connect-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px;
+    }
+    .connect-card {
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border); border-radius: 20px;
+      padding: 28px 24px; transition: all 0.3s var(--spring);
+    }
+    .connect-card:hover { border-color: rgba(74,222,128,0.25); transform: translateY(-3px); }
+    .connect-icon {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; margin-bottom: 16px;
+    }
+    .connect-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .connect-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+
+    /* ── Connect Flow Diagram ────────────── */
+    .connect-flow {
+      margin: 40px auto 0; max-width: 720px;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border); border-radius: 20px;
+      padding: 32px 24px; position: relative;
+    }
+    .flow-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .flow-row:last-child { margin-bottom: 0; }
+    .flow-node {
+      background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.25);
+      color: var(--green); font-size: 13px; font-weight: 600;
+      padding: 8px 16px; border-radius: 10px; white-space: nowrap;
+    }
+    .flow-node.cyan {
+      background: rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.25);
+      color: var(--cyan);
+    }
+    .flow-node.violet {
+      background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.25);
+      color: var(--violet);
+    }
+    .flow-node.orange {
+      background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.25);
+      color: var(--orange);
+    }
+    .flow-arrow {
+      color: var(--text-dim); font-size: 16px; font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .flow-arrow-down {
+      display: flex; justify-content: center;
+      color: var(--text-dim); font-size: 16px; font-weight: 600;
+      font-family: 'JetBrains Mono', monospace; margin: 4px 0;
+    }
+    .flow-branch {
+      display: flex; justify-content: center; gap: 40px;
+    }
+
+    /* ── Connect Stats Row ───────────────── */
+    .connect-stats {
+      display: flex; justify-content: center; gap: 32px;
+      flex-wrap: wrap; margin-top: 32px;
+    }
+    .connect-stat {
+      text-align: center; padding: 16px 20px;
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border); border-radius: 16px;
+      min-width: 160px;
+    }
+    .connect-stat .stat-value {
+      font-size: 20px; font-weight: 700;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      display: block; margin-bottom: 4px;
+    }
+    .connect-stat .stat-label {
+      font-size: 13px; color: var(--text-dim); font-weight: 500;
+    }
+
     @media (max-width: 768px) {
       .impact-grid { grid-template-columns: 1fr; }
       .device-grid { grid-template-columns: 1fr; }
+      .connect-grid { grid-template-columns: 1fr; }
+      .flow-branch { gap: 20px; }
+      .connect-stats { gap: 12px; }
+      .connect-stat { min-width: 140px; }
     }
 
     /* ── Footer ────────────────────────────── */
@@ -472,6 +558,7 @@
     </a>
     <div class="nav-links">
       <a href="#healthcare">Healthcare</a>
+      <a href="#connect">Connect</a>
       <a href="#features">Features</a>
       <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-nav">GitHub</a>
       <a href="#forgeBox" class="btn-nav" style="background:linear-gradient(135deg,var(--orange),var(--fuchsia));">Start Forging</a>
@@ -519,6 +606,77 @@
         <div class="impact-icon" style="background:rgba(245,158,11,0.12);color:var(--orange);">&#9889;</div>
         <h3>Built for the Field</h3>
         <p>Battery-powered, IP-rated, tropical-climate ready. Designed for where reliable power and clean rooms don&rsquo;t exist.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Connect -->
+<section class="connect-section" id="connect">
+  <div class="container">
+    <div class="section-label" style="background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Connect</div>
+    <div class="section-title">From Device to Patient to Family</div>
+    <div class="section-sub" style="max-width:640px;">MeshCue Connect closes the communication loop &mdash; alerts flow from device to clinic to patient to family, in 9 languages, on any phone.</div>
+    <div class="connect-grid">
+      <div class="connect-card">
+        <div class="connect-icon" style="background:rgba(74,222,128,0.12);color:var(--green);">&#128241;</div>
+        <h3>SMS Alerts</h3>
+        <p>Critical readings trigger instant SMS to patient, family, and nurse. Works on any phone, any network. No internet needed.</p>
+      </div>
+      <div class="connect-card">
+        <div class="connect-icon" style="background:rgba(34,211,238,0.12);color:var(--cyan);">&#128222;</div>
+        <h3>USSD Menus</h3>
+        <p>Patients report symptoms, request appointments, and check results by dialing *123#. Zero data cost. Works on $10 phones.</p>
+      </div>
+      <div class="connect-card">
+        <div class="connect-icon" style="background:rgba(139,92,246,0.12);color:var(--violet);">&#127973;</div>
+        <h3>Smart Triage</h3>
+        <p>AI-powered keyword detection routes messages by urgency. FEVER &rarr; nurse notified. HELP &rarr; emergency escalation. STOP &rarr; instant opt-out.</p>
+      </div>
+      <div class="connect-card">
+        <div class="connect-icon" style="background:rgba(245,158,11,0.12);color:var(--orange);">&#128104;&#8205;&#128105;&#8205;&#128103;</div>
+        <h3>Family Updates</h3>
+        <p>Emergency contacts get automatic alerts when critical readings are detected. Migrant workers stay connected to their children&rsquo;s health.</p>
+      </div>
+    </div>
+
+    <!-- Patient Journey Flow Diagram -->
+    <div class="connect-flow">
+      <div class="flow-row">
+        <span class="flow-node">Device Reading</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-node cyan">Mesh Network</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-node violet">Connect Router</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-node orange">SMS / WhatsApp / Voice</span>
+      </div>
+      <div class="flow-arrow-down">&darr;</div>
+      <div class="flow-branch">
+        <div style="text-align:center;">
+          <span class="flow-node">Patient</span>
+          <div class="flow-arrow-down">&darr;</div>
+          <span class="flow-node cyan">Clinic</span>
+        </div>
+        <div style="text-align:center;">
+          <span class="flow-node orange">Family</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connect Stats -->
+    <div class="connect-stats">
+      <div class="connect-stat">
+        <span class="stat-value">9 Languages</span>
+        <span class="stat-label">Any phone, any network</span>
+      </div>
+      <div class="connect-stat">
+        <span class="stat-value">SMS + USSD + WhatsApp</span>
+        <span class="stat-label">Multi-channel delivery</span>
+      </div>
+      <div class="connect-stat">
+        <span class="stat-value">Clinic &#8596; Patient &#8596; Family</span>
+        <span class="stat-label">Full communication loop</span>
       </div>
     </div>
   </div>
@@ -789,9 +947,9 @@
         <p>Say "pulse oximeter" or "smart doorbell" &mdash; Forge knows the components. 30+ medical archetypes, WHO + CE regulatory docs, IP-rated enclosures.</p>
       </div>
       <div class="f-card">
-        <div class="f-icon" style="background:rgba(34,211,238,0.12);color:var(--cyan);">&#10697;</div>
-        <h3>AI 3D visualization</h3>
-        <p>NVIDIA Hunyuan3D for textured models, Cosmos Transfer for photorealistic video of your device.</p>
+        <div class="f-icon" style="background:rgba(34,211,238,0.12);color:var(--cyan);">&#128241;</div>
+        <h3>Connect: 9 languages, any phone</h3>
+        <p>SMS, USSD, WhatsApp alerts from device to patient to family. Smart triage routes by urgency. Zero internet required.</p>
       </div>
       <div class="f-card">
         <div class="f-icon" style="background:rgba(139,92,246,0.12);color:var(--violet);">&#9879;</div>

@@ -49,6 +49,7 @@ import {
   generateCEGuidance,
   generateBatteryLifeEstimate,
   generateFieldTestChecklist,
+  generateConnectSetupDoc,
 } from "../backends/docs/medical.js";
 
 // i18n
@@ -781,6 +782,11 @@ export async function build(
       artifacts.push(generateCEGuidance(doc, docLang));
       artifacts.push(generateBatteryLifeEstimate(doc, docLang));
       artifacts.push(generateFieldTestChecklist(doc, docLang));
+
+      // MeshCue Connect communication setup doc
+      if (doc.firmware?.connectEnabled || doc.meta?.connectEnabled) {
+        artifacts.push(generateConnectSetupDoc(doc, docLang));
+      }
     }
 
     emit({ stage: "docs", status: "done", durationMs: Date.now() - t });

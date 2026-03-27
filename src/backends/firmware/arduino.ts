@@ -1615,6 +1615,143 @@ const GENERATORS: Record<string, (comp: Component) => CodeBlock> = {
   color_sensor: generateColorSensorCode,
 };
 
+// ─── MeshCue Connect Client Code Generator ──────────────────
+
+function generateConnectClientCode(doc: MHDLDocument): CodeBlock {
+  const gatewayUrl = doc.firmware?.connectGatewayUrl || "https://connect.meshcue.com";
+  const deviceId = doc.firmware?.connectDeviceId || "forge-device-001";
+  const thresholds = doc.firmware?.connectAlertThresholds || {};
+
+  const includes = ["WiFi.h", "HTTPClient.h"];
+
+  const globals: string[] = [
+    `// MeshCue Connect — patient alert system`,
+    `const char* CONNECT_GATEWAY = "${gatewayUrl}";`,
+    `const char* DEVICE_ID = "${deviceId}";`,
+    `unsigned long lastAlertMs = 0;`,
+    `const unsigned long ALERT_COOLDOWN_MS = 60000; // 1 min between same alerts`,
+  ];
+
+  const functions: string[] = [
+    `void sendConnectAlert(const char* reading, float value, const char* unit, const char* severity) {`,
+    `  if (WiFi.status() != WL_CONNECTED) return;`,
+    `  if (millis() - lastAlertMs < ALERT_COOLDOWN_MS) return;`,
+    ``,
+    `  HTTPClient http;`,
+    `  http.begin(String(CONNECT_GATEWAY) + "/api/alert");`,
+    `  http.addHeader("Content-Type", "application/json");`,
+    ``,
+    `  String payload = "{\\"deviceId\\":\\"" + String(DEVICE_ID) + "\\","`,
+    `    "\\"reading\\":\\"" + String(reading) + "\\","`,
+    `    "\\"value\\":" + String(value) + ","`,
+    `    "\\"unit\\":\\"" + String(unit) + "\\","`,
+    `    "\\"severity\\":\\"" + String(severity) + "\\"}";`,
+    ``,
+    `  int code = http.POST(payload);`,
+    `  if (code == 200) lastAlertMs = millis();`,
+    `  http.end();`,
+    `}`,
+  ];
+
+  // Generate threshold-checking loop code based on what sensors / thresholds are configured
+  const loop: string[] = [
+    ``,
+    `  // ── MeshCue Connect threshold checks ──`,
+  ];
+
+  // SpO2 thresholds (pulse_oximeter)
+  if (thresholds["spo2_low"]) {
+    const w = thresholds["spo2_low"].warning;
+    const c = thresholds["spo2_low"].critical;
+    loop.push(
+      `  // SpO2 threshold check`,
+      `  if (sensor_spo2_value > 0) {`,
+      `    if (sensor_spo2_value < ${c}) {`,
+      `      sendConnectAlert("SpO2", sensor_spo2_value, "%", "critical");`,
+      `    } else if (sensor_spo2_value < ${w}) {`,
+      `      sendConnectAlert("SpO2", sensor_spo2_value, "%", "warning");`,
+      `    }`,
+      `  }`,
+    );
+  }
+
+  // Heart rate thresholds (ecg_monitor)
+  if (thresholds["hr_high"] || thresholds["hr_low"]) {
+    loop.push(`  // Heart rate threshold check`);
+    loop.push(`  if (sensor_ecg_value > 0) {`);
+    if (thresholds["hr_high"]) {
+      const w = thresholds["hr_high"].warning;
+      const c = thresholds["hr_high"].critical;
+      loop.push(
+        `    if (sensor_ecg_value > ${c}) {`,
+        `      sendConnectAlert("HeartRate", sensor_ecg_value, "bpm", "critical");`,
+        `    } else if (sensor_ecg_value > ${w}) {`,
+        `      sendConnectAlert("HeartRate", sensor_ecg_value, "bpm", "warning");`,
+        `    }`,
+      );
+    }
+    if (thresholds["hr_low"]) {
+      const w = thresholds["hr_low"].warning;
+      const c = thresholds["hr_low"].critical;
+      loop.push(
+        `    if (sensor_ecg_value < ${c}) {`,
+        `      sendConnectAlert("HeartRate", sensor_ecg_value, "bpm", "critical");`,
+        `    } else if (sensor_ecg_value < ${w}) {`,
+        `      sendConnectAlert("HeartRate", sensor_ecg_value, "bpm", "warning");`,
+        `    }`,
+      );
+    }
+    loop.push(`  }`);
+  }
+
+  // Temperature thresholds (thermometer_clinical, infant_warmer_controller)
+  if (thresholds["temp_high"] || thresholds["temp_low"]) {
+    loop.push(`  // Temperature threshold check`);
+    loop.push(`  if (sensor_temp_value > 0) {`);
+    if (thresholds["temp_high"]) {
+      const w = thresholds["temp_high"].warning;
+      const c = thresholds["temp_high"].critical;
+      loop.push(
+        `    if (sensor_temp_value > ${c}) {`,
+        `      sendConnectAlert("Temperature", sensor_temp_value, "C", "critical");`,
+        `    } else if (sensor_temp_value > ${w}) {`,
+        `      sendConnectAlert("Temperature", sensor_temp_value, "C", "warning");`,
+        `    }`,
+      );
+    }
+    if (thresholds["temp_low"]) {
+      const w = thresholds["temp_low"].warning;
+      const c = thresholds["temp_low"].critical;
+      loop.push(
+        `    if (sensor_temp_value < ${c}) {`,
+        `      sendConnectAlert("Temperature", sensor_temp_value, "C", "critical");`,
+        `    } else if (sensor_temp_value < ${w}) {`,
+        `      sendConnectAlert("Temperature", sensor_temp_value, "C", "warning");`,
+        `    }`,
+      );
+    }
+    loop.push(`  }`);
+  }
+
+  // Blood pressure thresholds
+  if (thresholds["systolic_high"]) {
+    const w = thresholds["systolic_high"].warning;
+    const c = thresholds["systolic_high"].critical;
+    loop.push(
+      `  // Blood pressure threshold check`,
+      `  if (sensor_pressure_value > 0) {`,
+      `    if (sensor_pressure_value > ${c}) {`,
+      `      sendConnectAlert("Systolic", sensor_pressure_value, "mmHg", "critical");`,
+      `    } else if (sensor_pressure_value > ${w}) {`,
+      `      sendConnectAlert("Systolic", sensor_pressure_value, "mmHg", "warning");`,
+      `    }`,
+      `  }`,
+    );
+  }
+
+  return { includes, globals, setup: [], loop, functions };
+}
+
 // ─── Main Generator ──────────────────────────────────────────
 
 export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
@@ -1640,6 +1777,11 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
     if (calibratablePresent.size > 0) {
       blocks.push(generateCalibrationManagerCode(calibratablePresent));
     }
+  }
+
+  // MeshCue Connect: inject alert client when connectEnabled
+  if (doc.firmware?.connectEnabled || doc.meta?.connectEnabled) {
+    blocks.push(generateConnectClientCode(doc));
   }
 
   // Merge all includes

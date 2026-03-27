@@ -922,6 +922,132 @@ const GENERATORS: Record<string, (comp: Component) => PyCodeBlock> = {
 
 // ─── Main Generator ──────────────────────────────────────────
 
+// ─── MeshCue Connect Client Code Generator (MicroPython) ────
+
+function generateConnectClientCodePy(doc: MHDLDocument): PyCodeBlock {
+  const gatewayUrl = doc.firmware?.connectGatewayUrl || "https://connect.meshcue.com";
+  const deviceId = doc.firmware?.connectDeviceId || "forge-device-001";
+  const thresholds = doc.firmware?.connectAlertThresholds || {};
+
+  const imports = ["import urequests", "import ujson"];
+
+  const globals: string[] = [
+    `# MeshCue Connect — patient alert system`,
+    `CONNECT_GATEWAY = "${gatewayUrl}"`,
+    `DEVICE_ID = "${deviceId}"`,
+    `_last_alert = 0`,
+  ];
+
+  const functions: string[] = [
+    `def send_connect_alert(reading, value, unit, severity):`,
+    `    global _last_alert`,
+    `    now = time.ticks_ms()`,
+    `    if time.ticks_diff(now, _last_alert) < 60000:`,
+    `        return`,
+    `    try:`,
+    `        data = ujson.dumps({`,
+    `            "deviceId": DEVICE_ID,`,
+    `            "reading": reading,`,
+    `            "value": value,`,
+    `            "unit": unit,`,
+    `            "severity": severity`,
+    `        })`,
+    `        r = urequests.post(CONNECT_GATEWAY + "/api/alert",`,
+    `                          data=data,`,
+    `                          headers={"Content-Type": "application/json"})`,
+    `        if r.status_code == 200:`,
+    `            _last_alert = now`,
+    `        r.close()`,
+    `    except:`,
+    `        pass  # Fail silently — device continues monitoring`,
+    ``,
+  ];
+
+  // Generate threshold-checking loop code
+  const loop: string[] = [
+    ``,
+    `        # ── MeshCue Connect threshold checks ──`,
+  ];
+
+  // SpO2 thresholds (pulse_oximeter)
+  if (thresholds["spo2_low"]) {
+    const w = thresholds["spo2_low"].warning;
+    const c = thresholds["spo2_low"].critical;
+    loop.push(
+      `        if sensor_spo2_value > 0:`,
+      `            if sensor_spo2_value < ${c}:`,
+      `                send_connect_alert("SpO2", sensor_spo2_value, "%", "critical")`,
+      `            elif sensor_spo2_value < ${w}:`,
+      `                send_connect_alert("SpO2", sensor_spo2_value, "%", "warning")`,
+    );
+  }
+
+  // Heart rate thresholds (ecg_monitor)
+  if (thresholds["hr_high"] || thresholds["hr_low"]) {
+    loop.push(`        if sensor_ecg_value > 0:`);
+    if (thresholds["hr_high"]) {
+      const w = thresholds["hr_high"].warning;
+      const c = thresholds["hr_high"].critical;
+      loop.push(
+        `            if sensor_ecg_value > ${c}:`,
+        `                send_connect_alert("HeartRate", sensor_ecg_value, "bpm", "critical")`,
+        `            elif sensor_ecg_value > ${w}:`,
+        `                send_connect_alert("HeartRate", sensor_ecg_value, "bpm", "warning")`,
+      );
+    }
+    if (thresholds["hr_low"]) {
+      const w = thresholds["hr_low"].warning;
+      const c = thresholds["hr_low"].critical;
+      loop.push(
+        `            if sensor_ecg_value < ${c}:`,
+        `                send_connect_alert("HeartRate", sensor_ecg_value, "bpm", "critical")`,
+        `            elif sensor_ecg_value < ${w}:`,
+        `                send_connect_alert("HeartRate", sensor_ecg_value, "bpm", "warning")`,
+      );
+    }
+  }
+
+  // Temperature thresholds
+  if (thresholds["temp_high"] || thresholds["temp_low"]) {
+    loop.push(`        if sensor_temp_value > 0:`);
+    if (thresholds["temp_high"]) {
+      const w = thresholds["temp_high"].warning;
+      const c = thresholds["temp_high"].critical;
+      loop.push(
+        `            if sensor_temp_value > ${c}:`,
+        `                send_connect_alert("Temperature", sensor_temp_value, "C", "critical")`,
+        `            elif sensor_temp_value > ${w}:`,
+        `                send_connect_alert("Temperature", sensor_temp_value, "C", "warning")`,
+      );
+    }
+    if (thresholds["temp_low"]) {
+      const w = thresholds["temp_low"].warning;
+      const c = thresholds["temp_low"].critical;
+      loop.push(
+        `            if sensor_temp_value < ${c}:`,
+        `                send_connect_alert("Temperature", sensor_temp_value, "C", "critical")`,
+        `            elif sensor_temp_value < ${w}:`,
+        `                send_connect_alert("Temperature", sensor_temp_value, "C", "warning")`,
+      );
+    }
+  }
+
+  // Blood pressure thresholds
+  if (thresholds["systolic_high"]) {
+    const w = thresholds["systolic_high"].warning;
+    const c = thresholds["systolic_high"].critical;
+    loop.push(
+      `        if sensor_pressure_value > 0:`,
+      `            if sensor_pressure_value > ${c}:`,
+      `                send_connect_alert("Systolic", sensor_pressure_value, "mmHg", "critical")`,
+      `            elif sensor_pressure_value > ${w}:`,
+      `                send_connect_alert("Systolic", sensor_pressure_value, "mmHg", "warning")`,
+    );
+  }
+
+  return { imports, globals, setup: [], loop, functions };
+}
+
 export function generateMicroPythonFirmware(doc: MHDLDocument): BuildArtifact[] {
   const artifacts: BuildArtifact[] = [];
 
@@ -932,6 +1058,11 @@ export function generateMicroPythonFirmware(doc: MHDLDocument): BuildArtifact[] 
     if (gen) {
       blocks.push(gen(comp));
     }
+  }
+
+  // MeshCue Connect: inject alert client when connectEnabled
+  if (doc.firmware?.connectEnabled || doc.meta?.connectEnabled) {
+    blocks.push(generateConnectClientCodePy(doc));
   }
 
   // Deduplicate imports

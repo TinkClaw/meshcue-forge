@@ -229,3 +229,185 @@ Note: The server expects newline-delimited JSON-RPC messages on stdin and writes
 | `meshforge-build` | MHDL spec to build artifacts | `spec` (MHDL JSON string) |
 | `meshforge-validate` | Run Design Rule Checks on a spec | `spec` (MHDL JSON string) |
 | `meshforge-iterate` | Patch an existing spec and rebuild | `spec` (MHDL JSON), `patch` (string) |
+| `meshcue-connect-alert` | Send critical alert to patient + family + nurse | `patientId`, `reading`, `deviceId` |
+| `meshcue-connect-send` | Send message to a phone number | `phone`, `message`, `channel`, `language` |
+| `meshcue-connect-register` | Register patient with contacts and consent | `phone`, `name`, `language`, `emergencyContacts` |
+| `meshcue-connect-inbox` | Retrieve incoming messages | `since` (ISO timestamp), `status` |
+
+---
+
+## MeshCue Connect — Patient Communication
+
+MeshCue Connect adds SMS, USSD, WhatsApp, and Voice/IVR communication to the Forge pipeline. Alerts flow from device readings through the mesh network to patients, families, and clinicians.
+
+### Setting Up Africa's Talking Sandbox
+
+1. Create a free account at [africastalking.com](https://africastalking.com).
+2. Navigate to the Sandbox environment (toggle in the top-right corner of the dashboard).
+3. Generate an API key under **Settings > API Key**.
+4. Note your sandbox username — it is always `sandbox`.
+5. Set environment variables:
+
+```bash
+export MESHCUE_AT_API_KEY="your-sandbox-api-key"
+export MESHCUE_AT_USERNAME="sandbox"
+export MESHCUE_AT_SHORTCODE="5555"
+```
+
+6. Register test phone numbers in the sandbox simulator at [simulator.africastalking.com](https://simulator.africastalking.com).
+
+### Example MCP Tool Calls
+
+**Send a critical alert (device reading triggers SMS to patient + family + nurse):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-connect-alert",
+    "arguments": {
+      "patientId": "patient-001",
+      "reading": {
+        "type": "spo2",
+        "value": 88,
+        "unit": "%",
+        "severity": "critical",
+        "deviceId": "oximeter-node-12"
+      }
+    }
+  }
+}
+```
+
+Response: alert sent to patient via SMS, family contacts via SMS, and assigned nurse via SMS + WhatsApp.
+
+**Send a direct message:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-connect-send",
+    "arguments": {
+      "phone": "+250781234567",
+      "message": "Your appointment is confirmed for Monday 10am at Kigali Health Center.",
+      "channel": "sms",
+      "language": "en"
+    }
+  }
+}
+```
+
+**Register a patient:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-connect-register",
+    "arguments": {
+      "phone": "+250781234567",
+      "name": "Marie Uwimana",
+      "language": "rw",
+      "emergencyContacts": [
+        { "phone": "+250789876543", "relation": "mother", "name": "Jeanne" }
+      ],
+      "consent": true
+    }
+  }
+}
+```
+
+**Retrieve incoming messages:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-connect-inbox",
+    "arguments": {
+      "since": "2026-03-25T00:00:00Z",
+      "status": "unread"
+    }
+  }
+}
+```
+
+### Example USSD Flow
+
+When a patient dials the USSD shortcode (e.g., `*384*5555#`), they see:
+
+```
+Welcome to MeshCue Health
+1. Report symptoms
+2. Request appointment
+3. Check results
+4. Update language
+5. Opt out
+```
+
+Selecting **1. Report symptoms** prompts:
+
+```
+Describe your symptoms:
+(Type keywords: FEVER, COUGH, PAIN, DIZZY, BLEEDING)
+```
+
+The patient types `FEVER COUGH`. The smart triage engine:
+
+1. Detects `FEVER` as a priority keyword.
+2. Assigns urgency level `high`.
+3. Routes the message to the assigned nurse via SMS.
+4. Sends confirmation to the patient: "Your symptoms have been reported. A nurse will contact you within 2 hours."
+5. If the patient's language is Kinyarwanda, all messages are sent in Kinyarwanda.
+
+### Webhook Setup for Incoming Messages
+
+MeshCue Connect receives incoming SMS, USSD sessions, and delivery reports via webhooks.
+
+**Africa's Talking webhook configuration:**
+
+1. In the Africa's Talking dashboard, go to **SMS > Callback URLs**.
+2. Set the **Incoming Messages** callback to:
+   ```
+   https://your-server.com/webhooks/africastalking/sms/incoming
+   ```
+3. Set the **Delivery Reports** callback to:
+   ```
+   https://your-server.com/webhooks/africastalking/sms/delivery
+   ```
+4. For USSD, go to **USSD > Callback URL** and set:
+   ```
+   https://your-server.com/webhooks/africastalking/ussd
+   ```
+
+**WhatsApp webhook configuration:**
+
+1. In the Meta Business dashboard, configure the webhook URL:
+   ```
+   https://your-server.com/webhooks/whatsapp/incoming
+   ```
+2. Set the verify token to match your `MESHCUE_WA_VERIFY_TOKEN` environment variable.
+3. Subscribe to `messages` webhook events.
+
+**Webhook payload format (incoming SMS):**
+
+```json
+{
+  "from": "+250781234567",
+  "to": "5555",
+  "text": "FEVER COUGH",
+  "date": "2026-03-26T14:30:00Z",
+  "id": "ATXid_abc123"
+}
+```
+
+MeshCue Connect processes the incoming message through the triage engine, matches the phone number to a registered patient, applies language preferences, and routes accordingly.
