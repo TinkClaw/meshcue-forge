@@ -35,6 +35,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { createServer } from "node:http";
 
 import { describe } from "./tools/describe.js";
 import { build, type BuildStage, type BuildProgress } from "./tools/build.js";
@@ -43,6 +44,7 @@ import { loadConfig, detectCapabilities } from "./config.js";
 import type { MHDLDocument } from "./schema/mhdl.js";
 import { registerConnectTools } from "./connect/mcp.js";
 import { registerRAMTools } from "./ram/mcp.js";
+import { startWebhookServer } from "./connect/webhook.js";
 
 // ─── Server Setup ────────────────────────────────────────────
 
@@ -462,7 +464,42 @@ function deepMerge(target: unknown, source: unknown): unknown {
 
 // ─── Start Server ────────────────────────────────────────────
 
+// ─── Health Check HTTP Server ───────────────────────────────
+
+const HEALTH_PORT = parseInt(process.env.MESHCUE_HEALTH_PORT || "8080", 10);
+
+const healthServer = createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      status: "ok",
+      service: "meshcue-forge",
+      version: "0.1.0",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+    }));
+  } else if (req.url === "/ready") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ready: true }));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+// ─── Start Server ────────────────────────────────────────────
+
 async function main() {
+  // Start health check server (non-blocking, for Docker/k8s probes)
+  healthServer.listen(HEALTH_PORT, "0.0.0.0", () => {
+    console.error(`Health endpoint: http://0.0.0.0:${HEALTH_PORT}/health`);
+  });
+
+  // Start webhook server for incoming SMS/WhatsApp/USSD callbacks
+  const webhookPort = parseInt(process.env.MESHCUE_WEBHOOK_PORT || "8081", 10);
+  startWebhookServer(webhookPort);
+
+  // Start MCP stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("MeshCue Forge + Connect + RAM MCP server running — forge.meshcue.com");

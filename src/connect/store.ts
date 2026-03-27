@@ -53,11 +53,20 @@ export class ConnectStore {
         this.db.pragma("foreign_keys = ON");
         this._initSchema();
         this.usingSqlite = true;
-      } catch {
-        // Failed to init SQLite — fall back to in-memory
+      } catch (err) {
+        console.warn(
+          "[MeshCue Connect] SQLite initialization failed — using in-memory store. " +
+          "Data will NOT persist across restarts.",
+          err instanceof Error ? err.message : err,
+        );
         this.db = null;
         this.usingSqlite = false;
       }
+    } else {
+      console.warn(
+        "[MeshCue Connect] better-sqlite3 not available — using in-memory store. " +
+        "Install better-sqlite3 for persistent storage.",
+      );
     }
   }
 

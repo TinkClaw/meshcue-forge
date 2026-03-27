@@ -914,11 +914,46 @@ export async function build(
     emit({ stage: "docs", status: "done", durationMs: Date.now() - t });
   }
 
-  return {
+  const result = {
     success: failedStages.length === 0,
     artifacts,
     validation,
     buildTime: Date.now() - startTime,
     failedStages,
   };
+
+  // ── Auto-register built device in RAM (if clinicId present) ──
+  if (result.success && doc.meta?.connectEnabled && doc.firmware?.connectDeviceId) {
+    try {
+      const { RAMStore } = await import("../ram/store.js");
+      const ram = new RAMStore(process.env.MESHCUE_DB_PATH);
+      const meta = doc.meta as unknown as Record<string, unknown>;
+      ram.registerAsset({
+        clinicId: (meta.clinicId as string) || "unassigned",
+        category: "device",
+        name: doc.meta.name || "Forge Device",
+        description: doc.meta.intendedUse || `Built by MeshCue Forge — ${doc.board?.mcu || "unknown MCU"}`,
+        manufacturer: "MeshCue Forge",
+        model: doc.meta.deviceClass || "custom",
+        serialNumber: doc.firmware.connectDeviceId,
+        status: "received",
+        tags: [
+          "forge-built",
+          doc.meta.medical ? "medical" : "general",
+          doc.board?.mcu || "unknown-mcu",
+        ].filter(Boolean) as string[],
+        metadata: {
+          forgeDeviceId: doc.firmware.connectDeviceId,
+          buildTime: result.buildTime,
+          components: doc.board?.components?.length || 0,
+          medical: doc.meta.medical || false,
+        },
+      });
+      ram.close();
+    } catch {
+      // RAM registration is best-effort — don't fail the build
+    }
+  }
+
+  return result;
 }

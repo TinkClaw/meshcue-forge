@@ -8,6 +8,7 @@
  * return sensible defaults so local-only builds work unchanged.
  */
 
+import { createHmac, randomBytes } from "node:crypto";
 import type { MHDLDocument } from "../schema/mhdl.js";
 import type {
   MeshNode,
@@ -28,6 +29,28 @@ function nextId(): string {
   return `forge-${Date.now()}-${++msgCounter}`;
 }
 
+/**
+ * Sign a message payload with HMAC-SHA256 for mesh authentication.
+ * The shared secret comes from MESHCUE_MESH_SECRET env var.
+ */
+function signMessage(payload: string, secret: string): string {
+  return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+/**
+ * Verify an HMAC-SHA256 signature on an incoming mesh message.
+ */
+function verifySignature(payload: string, signature: string, secret: string): boolean {
+  const expected = createHmac("sha256", secret).update(payload).digest("hex");
+  // Constant-time comparison
+  if (expected.length !== signature.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 // ─── MeshBridge ─────────────────────────────────────────────
 
 export class MeshBridge {
@@ -40,10 +63,18 @@ export class MeshBridge {
   >();
   private progressListeners = new Map<string, ProgressCallback>();
   private connectTimeout: number;
+  private meshSecret: string | undefined;
+  private authenticated = false;
 
   constructor(meshEndpoint?: string, connectTimeout = 5_000) {
-    this.endpoint = meshEndpoint || process.env.MESH_ENDPOINT || "ws://localhost:9871";
+    this.endpoint = meshEndpoint || process.env.MESHCUE_MESH_ENDPOINT || "ws://localhost:9871";
     this.connectTimeout = connectTimeout;
+    this.meshSecret = process.env.MESHCUE_MESH_SECRET;
+  }
+
+  /** Whether this bridge uses authenticated (HMAC-signed) messages. */
+  get isAuthenticated(): boolean {
+    return this.authenticated;
   }
 
   // ─── Connection Management ──────────────────────────────
@@ -158,7 +189,18 @@ export class MeshBridge {
       this.pendingRequests.set(id, { resolve, reject, timer });
 
       const msg: MeshMessage = { type: type as MeshMessage["type"], id, payload };
-      this.ws.send(JSON.stringify(msg));
+      const raw = JSON.stringify(msg);
+
+      // Sign message with HMAC-SHA256 if secret is configured
+      if (this.meshSecret) {
+        const nonce = randomBytes(16).toString("hex");
+        const sig = signMessage(nonce + raw, this.meshSecret);
+        const signed = JSON.stringify({ ...msg, _nonce: nonce, _sig: sig });
+        this.ws.send(signed);
+        this.authenticated = true;
+      } else {
+        this.ws.send(raw);
+      }
     });
   }
 

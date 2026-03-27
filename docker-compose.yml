@@ -1,6 +1,9 @@
 version: "3.9"
 
 services:
+  # ── MeshCue Forge + Connect + RAM ────────────────────────────
+  # Core service — runs standalone with SQLite persistence.
+  # Postgres and Redis are optional (enable via --profile full).
   forge:
     build:
       context: .
@@ -8,11 +11,15 @@ services:
     container_name: meshcue-forge
     restart: unless-stopped
     ports:
-      - "3000:3000"
-      - "8080:8080"
+      - "3000:3000"     # MCP stdio (if wrapped in socat/proxy)
+      - "8080:8080"     # Health check endpoint
+      - "8081:8081"     # Webhook server (SMS/WhatsApp/USSD/Voice)
     environment:
       - NODE_ENV=production
-      - FORGE_DATA_DIR=/app/data
+      - MESHCUE_DATA_DIR=/app/data
+      - MESHCUE_DB_PATH=/app/data/meshcue.db
+      - MESHCUE_HEALTH_PORT=8080
+      - MESHCUE_WEBHOOK_PORT=8081
       - ZOO_CAD_API_KEY=${ZOO_CAD_API_KEY:-}
       - ZOO_CAD_ENDPOINT=${ZOO_CAD_ENDPOINT:-https://api.zoo.dev}
       - LLAMA_MESH_ENDPOINT=${LLAMA_MESH_ENDPOINT:-}
@@ -23,32 +30,30 @@ services:
       - FORGE_PCB_BACKEND=${FORGE_PCB_BACKEND:-skidl}
       - FORGE_VIZ_BACKEND=${FORGE_VIZ_BACKEND:-hunyuan3d}
       - FORGE_ENABLE_GPU=${FORGE_ENABLE_GPU:-false}
-      - MESH_ENDPOINT=${MESH_ENDPOINT:-ws://host.docker.internal:9871}
-      - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql://forge:forge@postgres:5432/meshcue
+      - MESHCUE_MESH_ENDPOINT=${MESHCUE_MESH_ENDPOINT:-ws://host.docker.internal:9871}
+      - MESHCUE_DEFAULT_CHANNEL=${MESHCUE_DEFAULT_CHANNEL:-sms}
+      - MESHCUE_DEFAULT_LANGUAGE=${MESHCUE_DEFAULT_LANGUAGE:-en}
+      - MESHCUE_WA_VERIFY_TOKEN=${MESHCUE_WA_VERIFY_TOKEN:-meshcue-verify}
     volumes:
       - forge_data:/app/data
     networks:
       - meshcue-net
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
 
+  # ── PostgreSQL (optional — enable with: docker compose --profile full up)
   postgres:
     image: postgres:16-alpine
     container_name: meshcue-postgres
     restart: unless-stopped
+    profiles: ["full"]
     environment:
-      - POSTGRES_USER=forge
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-forge}
+      - POSTGRES_USER=meshcue
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-meshcue_dev}
       - POSTGRES_DB=meshcue
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -57,16 +62,17 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forge -d meshcue"]
+      test: ["CMD-SHELL", "pg_isready -U meshcue -d meshcue"]
       interval: 10s
       timeout: 5s
-      start_period: 15s
       retries: 5
 
+  # ── Redis (optional — enable with: docker compose --profile full up)
   redis:
     image: redis:7-alpine
     container_name: meshcue-redis
     restart: unless-stopped
+    profiles: ["full"]
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -78,8 +84,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
-      start_period: 5s
-      retries: 3
+      retries: 5
 
 volumes:
   forge_data:

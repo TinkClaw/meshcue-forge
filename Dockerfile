@@ -44,14 +44,17 @@ RUN mkdir -p /app/data && chown -R forge:forge /app/data
 # Switch to non-root user
 USER forge
 
-# Expose MCP stdio port and health check port
-EXPOSE 3000 8080
+# Expose MCP stdio, health check, and webhook ports
+EXPOSE 3000 8080 8081
 
 # Health check — hit the health endpoint every 30s
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/health || exit 1
 
 ENV NODE_ENV=production
-ENV FORGE_DATA_DIR=/app/data
+ENV MESHCUE_DATA_DIR=/app/data
+ENV MESHCUE_DB_PATH=/app/data/meshcue.db
+ENV MESHCUE_HEALTH_PORT=8080
+ENV MESHCUE_WEBHOOK_PORT=8081
 
 CMD ["node", "dist/index.js"]
