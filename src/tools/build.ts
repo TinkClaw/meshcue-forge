@@ -13,6 +13,7 @@ import type {
   BuildArtifact,
   BuildResult,
   BuildStageType,
+  FailedStage,
   ForgeConfig,
   EnclosureBackend,
   PCBBackend,
@@ -24,6 +25,7 @@ import { loadConfig, detectCapabilities, type BackendRegistry } from "../config.
 // Circuit + Firmware (always available)
 import { generateWokwiCircuit } from "../backends/circuit/wokwi.js";
 import { generateArduinoFirmware } from "../backends/firmware/arduino.js";
+import { generateMicroPythonFirmware } from "../backends/firmware/micropython.js";
 
 // Enclosure backends
 import { generateOpenSCADEnclosure } from "../backends/enclosure/openscad.js";
@@ -327,11 +329,12 @@ export async function build(
 ): Promise<BuildResult> {
   const startTime = Date.now();
   const artifacts: BuildArtifact[] = [];
+  const failedStages: FailedStage[] = [];
   const emit = onProgress ?? (() => {});
 
   // Load config and detect capabilities
   const config = configOverride ?? loadConfig();
-  const registry = detectCapabilities(config);
+  const registry = await detectCapabilities(config);
 
   // Always validate first
   emit({ stage: "validate", status: "starting" });
@@ -345,6 +348,7 @@ export async function build(
       artifacts: [],
       validation,
       buildTime: Date.now() - startTime,
+      failedStages: [],
     };
   }
 
@@ -358,12 +362,17 @@ export async function build(
     emit({ stage: "circuit", status: "done", backend: "wokwi", durationMs: Date.now() - t });
   }
 
-  // Firmware (Arduino — always available)
+  // Firmware (Arduino or MicroPython)
   if (buildAll || stages.includes("firmware")) {
-    emit({ stage: "firmware", status: "starting", backend: "arduino" });
+    const fwBackend = doc.firmware.framework === "micropython" ? "micropython" : "arduino";
+    emit({ stage: "firmware", status: "starting", backend: fwBackend });
     const t = Date.now();
-    artifacts.push(...generateArduinoFirmware(doc));
-    emit({ stage: "firmware", status: "done", backend: "arduino", durationMs: Date.now() - t });
+    if (fwBackend === "micropython") {
+      artifacts.push(...generateMicroPythonFirmware(doc));
+    } else {
+      artifacts.push(...generateArduinoFirmware(doc));
+    }
+    emit({ stage: "firmware", status: "done", backend: fwBackend, durationMs: Date.now() - t });
   }
 
   // Enclosure (multi-backend)
@@ -375,6 +384,7 @@ export async function build(
       artifacts.push(...await buildEnclosure(doc, backend, config));
       emit({ stage: "enclosure", status: "done", backend, durationMs: Date.now() - t });
     } catch (err) {
+      failedStages.push({ stage: "enclosure", error: String(err) });
       emit({ stage: "enclosure", status: "error", backend, error: String(err) });
     }
   }
@@ -388,6 +398,7 @@ export async function build(
       artifacts.push(...await buildPCB(doc, backend, config));
       emit({ stage: "pcb", status: "done", backend, durationMs: Date.now() - t });
     } catch (err) {
+      failedStages.push({ stage: "pcb", error: String(err) });
       emit({ stage: "pcb", status: "error", backend, error: String(err) });
     }
   }
@@ -404,6 +415,7 @@ export async function build(
       artifacts.push(...await buildVisualization(doc, backend, config));
       emit({ stage: "visualization", status: "done", backend, durationMs: Date.now() - t });
     } catch (err) {
+      failedStages.push({ stage: "visualization", error: String(err) });
       emit({ stage: "visualization", status: "error", backend, error: String(err) });
     }
   }
@@ -427,9 +439,10 @@ export async function build(
   }
 
   return {
-    success: true,
+    success: failedStages.length === 0,
     artifacts,
     validation,
     buildTime: Date.now() - startTime,
+    failedStages,
   };
 }

@@ -6,6 +6,7 @@
  */
 
 import type { MHDLDocument, BuildArtifact, ForgeConfig } from "../../schema/mhdl.js";
+import { fetchWithRetry, classifyHttpError } from "../../utils/fetch-retry.js";
 
 // ─── Prompt Builder ─────────────────────────────────────────
 
@@ -221,14 +222,19 @@ export async function generateCosmosVideo(
   }
 
   try {
-    const response = await fetch(config.cosmosEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const response = await fetchWithRetry(
+      config.cosmosEndpoint,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      { timeoutMs: 30_000, maxRetries: 2, baseDelayMs: 1_000 },
+    );
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
+      const classified = classifyHttpError(response.status, "Cosmos");
+      const errorText = classified || await response.text().catch(() => "Unknown error");
       return [
         {
           stage: "visualization",

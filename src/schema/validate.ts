@@ -44,11 +44,47 @@ const MCU_CURRENT: Record<string, number> = {
   attiny85: 10,
 };
 
+// ─── GPIO voltage by MCU family ──────────────────────────────
+
+const GPIO_VOLTAGE: Record<string, number> = {
+  esp32: 3.3,
+  "esp32-s3": 3.3,
+  "esp32-c3": 3.3,
+  "arduino-uno": 5,
+  "arduino-nano": 5,
+  "arduino-mega": 5,
+  rp2040: 3.3,
+  stm32: 3.3,
+  attiny85: 5,
+};
+
+// ─── Components that typically need 5V logic ─────────────────
+
+const TYPICALLY_5V_COMPONENTS = new Set(["relay", "motor", "stepper"]);
+
+// ─── Components that are typically 3.3V only ─────────────────
+
+const TYPICALLY_3V3_COMPONENTS = new Set(["oled"]);
+
+// ─── Default I2C addresses for common component models ───────
+
+const DEFAULT_I2C_ADDRESSES: Record<string, string> = {
+  "SSD1306": "0x3C",
+  "SH1106": "0x3C",
+  "BMP280": "0x76",
+  "BME280": "0x76",
+  "BME680": "0x76",
+  "AHT20": "0x38",
+  "MPU6050": "0x68",
+  "DS3231": "0x68",
+  "PCF8574": "0x20",
+  "PCA9685": "0x40",
+};
+
 // ─── Validators ──────────────────────────────────────────────
 
 function checkPinConflicts(doc: MHDLDocument): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const gpioUsage = new Map<number, string[]>();
 
   // Collect all GPIO usage from components (NOT the MCU — MCU pins mirror component pins)
   // Only flag conflicts when two non-MCU components share the same GPIO
@@ -84,7 +120,11 @@ function checkI2CAddresses(doc: MHDLDocument): ValidationIssue[] {
   const addresses = new Map<string, string>();
 
   for (const comp of doc.board.components) {
-    const addr = comp.properties?.["i2cAddress"] as string | undefined;
+    // Use explicit i2cAddress, or fall back to known defaults by model
+    let addr = comp.properties?.["i2cAddress"] as string | undefined;
+    if (!addr && comp.model) {
+      addr = DEFAULT_I2C_ADDRESSES[comp.model];
+    }
     if (addr) {
       if (addresses.has(addr)) {
         issues.push({
@@ -253,16 +293,305 @@ function checkMountingAlignment(doc: MHDLDocument): ValidationIssue[] {
   return issues;
 }
 
+// ─── Advanced DRC Validators ─────────────────────────────────
+
+function checkElectricalSafety(doc: MHDLDocument): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const family = doc.board.mcu.family;
+  const gpioV = GPIO_VOLTAGE[family] ?? 3.3;
+
+  for (const comp of doc.board.components) {
+    // 3.3V logic MCU driving typically-5V components
+    if (gpioV <= 3.3 && TYPICALLY_5V_COMPONENTS.has(comp.type)) {
+      issues.push({
+        severity: "warning",
+        code: "VOLTAGE_MISMATCH_5V",
+        message: `${comp.id} (${comp.type}) typically needs 5V logic, but ${family} is ${gpioV}V — use a level shifter or logic-level variant`,
+        path: `board.components.${comp.id}`,
+        fix: `Add a level shifter between MCU and ${comp.id}, or choose a 3.3V-compatible module`,
+      });
+    }
+
+    // 5V logic MCU driving typically-3.3V-only components
+    if (gpioV >= 5 && TYPICALLY_3V3_COMPONENTS.has(comp.type)) {
+      issues.push({
+        severity: "warning",
+        code: "VOLTAGE_MISMATCH_3V3",
+        message: `${comp.id} (${comp.type}) is typically 3.3V only, but ${family} outputs ${gpioV}V — risk of damage`,
+        path: `board.components.${comp.id}`,
+        fix: `Add a level shifter or voltage divider, or use a 5V-tolerant variant`,
+      });
+    }
+
+    // LED forward voltage check
+    if (comp.type === "led") {
+      const vf = comp.properties?.["forwardVoltage"] as number | undefined;
+      if (vf !== undefined && vf > gpioV) {
+        issues.push({
+          severity: "error",
+          code: "LED_VF_EXCEEDS_GPIO",
+          message: `LED ${comp.id} forward voltage ${vf}V exceeds GPIO voltage ${gpioV}V — LED will not light`,
+          path: `board.components.${comp.id}`,
+          fix: `Use a lower-Vf LED or drive from a higher voltage rail with a transistor`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+function checkMechanicalSpacing(doc: MHDLDocument): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const dims = doc.board.dimensions;
+
+  if (!dims) return issues;
+
+  // Check that mounting holes are not too close to board edges (< 3mm)
+  if (doc.board.mountingHoles) {
+    const minEdge = 3;
+    for (const pos of doc.board.mountingHoles.positions) {
+      const distLeft = pos.x;
+      const distRight = dims.widthMm - pos.x;
+      const distBottom = pos.y;
+      const distTop = dims.heightMm - pos.y;
+      const closest = Math.min(distLeft, distRight, distBottom, distTop);
+
+      if (closest > 0 && closest < minEdge) {
+        issues.push({
+          severity: "warning",
+          code: "MOUNT_HOLE_NEAR_EDGE",
+          message: `Mounting hole at (${pos.x}, ${pos.y}) is only ${closest.toFixed(1)}mm from board edge — minimum recommended is ${minEdge}mm`,
+          path: "board.mountingHoles",
+          fix: `Move mounting hole at least ${minEdge}mm from all edges to prevent cracking`,
+        });
+      }
+    }
+  }
+
+  // Check that cutouts on the same wall do not overlap
+  const cutoutsByWall = new Map<string, Array<{ idx: number; x: number; w: number; label: string }>>();
+
+  for (let i = 0; i < doc.enclosure.cutouts.length; i++) {
+    const cutout = doc.enclosure.cutouts[i];
+    if (cutout.position && cutout.size) {
+      const entries = cutoutsByWall.get(cutout.wall) || [];
+      entries.push({
+        idx: i,
+        x: cutout.position.x,
+        w: cutout.size.width,
+        label: cutout.componentRef || cutout.type,
+      });
+      cutoutsByWall.set(cutout.wall, entries);
+    }
+  }
+
+  for (const [wall, entries] of cutoutsByWall) {
+    // Sort by x position
+    const sorted = entries.sort((a, b) => a.x - b.x);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const a = sorted[i];
+      const b = sorted[i + 1];
+      if (a.x + a.w > b.x) {
+        issues.push({
+          severity: "warning",
+          code: "CUTOUT_OVERLAP",
+          message: `Cutouts "${a.label}" and "${b.label}" overlap on ${wall} wall`,
+          path: "enclosure.cutouts",
+          fix: `Reposition cutouts on the ${wall} wall to avoid overlap or move one to a different wall`,
+        });
+      }
+    }
+  }
+
+  // Check board size is large enough for components (simple heuristic)
+  const compArea = doc.board.components.length * 100; // ~10x10mm per component
+  const boardArea = dims.widthMm * dims.heightMm;
+  if (compArea > boardArea * 0.9) {
+    issues.push({
+      severity: "warning",
+      code: "BOARD_TOO_CROWDED",
+      message: `${doc.board.components.length} components may not fit on a ${dims.widthMm}x${dims.heightMm}mm board`,
+      path: "board.dimensions",
+      fix: `Increase board dimensions or reduce component count`,
+    });
+  }
+
+  return issues;
+}
+
+function checkThermalDesign(doc: MHDLDocument): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const family = doc.board.mcu.family;
+
+  // Estimate total current
+  let totalMa = MCU_CURRENT[family] || 100;
+
+  // If ESP32 with both WiFi and BLE active, add 200mA overhead
+  const wireless = doc.board.mcu.wireless || [];
+  const hasWifi = wireless.includes("wifi");
+  const hasBle = wireless.includes("ble") || wireless.includes("bluetooth");
+  if ((family === "esp32" || family === "esp32-s3" || family === "esp32-c3") && hasWifi && hasBle) {
+    totalMa += 200;
+    issues.push({
+      severity: "info",
+      code: "WIFI_BLE_CURRENT",
+      message: `${family} with WiFi + BLE active adds ~200mA — estimated MCU draw now ${(MCU_CURRENT[family] || 100) + 200}mA`,
+      path: "board.mcu",
+    });
+  }
+
+  for (const comp of doc.board.components) {
+    totalMa += CURRENT_ESTIMATES[comp.type] || 10;
+  }
+
+  // High current draw warning
+  if (totalMa > 500) {
+    issues.push({
+      severity: "warning",
+      code: "HEAT_MANAGEMENT",
+      message: `Total estimated draw is ${totalMa}mA — consider heat dissipation (heatsink, ventilation, copper pour)`,
+      path: "board.power",
+      fix: `Add ventilation to enclosure, use a heatsink on the regulator, or add a ground plane for heat spreading`,
+    });
+  }
+
+  // Motor/relay without flyback diode
+  const hasMotorOrRelay = doc.board.components.some(
+    (c) => c.type === "motor" || c.type === "relay" || c.type === "stepper" || c.type === "servo"
+  );
+  const hasFlybackDiode = doc.board.components.some(
+    (c) => c.type === "diode" && (c.properties?.["flyback"] === true || c.id.includes("flyback"))
+  );
+
+  if (hasMotorOrRelay && !hasFlybackDiode) {
+    issues.push({
+      severity: "warning",
+      code: "MISSING_FLYBACK_DIODE",
+      message: "Inductive load (motor/relay) present without a flyback diode — back-EMF can damage the MCU",
+      path: "board.components",
+      fix: `Add a flyback diode (e.g. 1N4007) across each inductive load`,
+    });
+  }
+
+  return issues;
+}
+
+function checkComponentCompatibility(doc: MHDLDocument): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  // SPI devices without CS pins
+  const spiDevices = doc.board.components.filter((c) =>
+    c.pins.some((p) => p.mode === "spi-mosi" || p.mode === "spi-miso" || p.mode === "spi-sck")
+  );
+
+  for (const spiDev of spiDevices) {
+    const hasCS = spiDev.pins.some((p) => p.mode === "spi-cs");
+    if (!hasCS) {
+      issues.push({
+        severity: "warning",
+        code: "SPI_MISSING_CS",
+        message: `SPI device ${spiDev.id} has no chip-select (CS) pin — it cannot share the SPI bus`,
+        path: `board.components.${spiDev.id}`,
+        fix: `Add a spi-cs pin to ${spiDev.id} and connect it to a GPIO`,
+      });
+    }
+  }
+
+  // UART devices sharing the same peripheral (same TX/RX GPIO pairs)
+  const uartDevices: Array<{ id: string; txGpio?: number; rxGpio?: number }> = [];
+  for (const comp of doc.board.components) {
+    const txPin = comp.pins.find((p) => p.mode === "uart-tx");
+    const rxPin = comp.pins.find((p) => p.mode === "uart-rx");
+    if (txPin || rxPin) {
+      uartDevices.push({ id: comp.id, txGpio: txPin?.gpio, rxGpio: rxPin?.gpio });
+    }
+  }
+
+  for (let i = 0; i < uartDevices.length; i++) {
+    for (let j = i + 1; j < uartDevices.length; j++) {
+      const a = uartDevices[i];
+      const b = uartDevices[j];
+      // If they share the same TX or RX GPIO, they conflict
+      if (
+        (a.txGpio !== undefined && a.txGpio === b.txGpio) ||
+        (a.rxGpio !== undefined && a.rxGpio === b.rxGpio)
+      ) {
+        issues.push({
+          severity: "warning",
+          code: "UART_PERIPHERAL_CONFLICT",
+          message: `UART devices ${a.id} and ${b.id} share the same UART peripheral pins — only one can communicate at a time`,
+          path: "board.components",
+          fix: `Use a different UART peripheral (different GPIO pair) for ${b.id}, or multiplex with a UART switch`,
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+function checkPCBConstraints(doc: MHDLDocument): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const pcb = doc.pcb;
+
+  if (!pcb) return issues;
+
+  // Trace width check
+  if (pcb.traceWidthMm !== undefined && pcb.traceWidthMm < 0.15) {
+    issues.push({
+      severity: "warning",
+      code: "PCB_TRACE_TOO_THIN",
+      message: `Trace width ${pcb.traceWidthMm}mm is below manufacturing minimum (0.15mm) — most fabs will reject this`,
+      path: "pcb.traceWidthMm",
+      fix: `Increase trace width to at least 0.15mm (0.25mm recommended for signal traces)`,
+    });
+  }
+
+  // Via size check
+  if (pcb.viaSizeMm !== undefined && pcb.viaSizeMm < 0.3) {
+    issues.push({
+      severity: "warning",
+      code: "PCB_VIA_TOO_SMALL",
+      message: `Via size ${pcb.viaSizeMm}mm is below manufacturing minimum (0.3mm) — most fabs require >= 0.3mm`,
+      path: "pcb.viaSizeMm",
+      fix: `Increase via size to at least 0.3mm`,
+    });
+  }
+
+  // Board size check — too small for mounting
+  const w = pcb.widthMm ?? doc.board.dimensions?.widthMm;
+  const h = pcb.heightMm ?? doc.board.dimensions?.heightMm;
+  if (w !== undefined && h !== undefined && w < 10 && h < 10) {
+    issues.push({
+      severity: "warning",
+      code: "PCB_TOO_SMALL",
+      message: `PCB size ${w}x${h}mm is too small for mounting holes — consider increasing board size`,
+      path: "pcb",
+      fix: `Increase board dimensions to at least 10x10mm if mounting holes are needed`,
+    });
+  }
+
+  return issues;
+}
+
 // ─── Main Validator ──────────────────────────────────────────
 
 export function validate(doc: MHDLDocument): ValidationResult {
   const issues: ValidationIssue[] = [
+    // Core checks
     ...checkPinConflicts(doc),
     ...checkI2CAddresses(doc),
     ...checkPowerBudget(doc),
     ...checkConnectionIntegrity(doc),
     ...checkEnclosureFit(doc),
     ...checkMountingAlignment(doc),
+    // Advanced DRC
+    ...checkElectricalSafety(doc),
+    ...checkMechanicalSpacing(doc),
+    ...checkThermalDesign(doc),
+    ...checkComponentCompatibility(doc),
+    ...checkPCBConstraints(doc),
   ];
 
   // Calculate stats

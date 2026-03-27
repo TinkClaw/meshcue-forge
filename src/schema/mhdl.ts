@@ -40,6 +40,11 @@ export type ComponentType =
   | "potentiometer"
   | "moisture"
   | "gas_sensor"
+  | "stepper"
+  | "encoder"
+  | "temperature_sensor"
+  | "thermocouple"
+  | "joystick"
   | "custom";
 
 export type MCUFamily =
@@ -229,6 +234,8 @@ export interface PCBConfig {
   copperWeight?: "1oz" | "2oz";
   surfaceFinish?: "hasl" | "enig" | "osp";
   autoRoute?: boolean;
+  traceWidthMm?: number;
+  viaSizeMm?: number;
 }
 
 // ─── Visualization ──────────────────────────────────────────
@@ -344,11 +351,17 @@ export interface BuildArtifact {
   backend?: string;
 }
 
+export interface FailedStage {
+  stage: BuildStageType;
+  error: string;
+}
+
 export interface BuildResult {
   success: boolean;
   artifacts: BuildArtifact[];
   validation: ValidationResult;
   buildTime: number;
+  failedStages: FailedStage[];
 }
 
 // ─── Forge Configuration ────────────────────────────────────
@@ -363,8 +376,6 @@ export interface ForgeConfig {
 
   // Local tools
   pythonPath?: string;
-  cadqueryAvailable?: boolean;
-  skidlAvailable?: boolean;
   kicadPath?: string;
   openscadPath?: string;
 

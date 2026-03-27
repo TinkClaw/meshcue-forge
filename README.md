@@ -168,6 +168,125 @@ MeshCue Forge is MIT licensed and welcomes contributions:
 - **Board templates** — pre-built MHDL specs for common projects
 - **Validation rules** — more DRC checks
 
+## Architecture
+
+MeshCue Forge follows a linear pipeline with validation at every stage:
+
+```
+Natural Language Input
+    |
+    v  meshforge-describe (keyword NL parser)
+    |
+  MHDL Spec (YAML/JSON — single source of truth)
+    |
+    v  meshforge-validate (Design Rule Checks)
+    |
+    v  meshforge-build (parallel backend execution)
+    |
+    +-- Circuit Stage     -> diagram.json (Wokwi)
+    +-- Firmware Stage    -> main.ino + platformio.ini (Arduino)
+    +-- Enclosure Stage   -> enclosure.scad (OpenSCAD / CadQuery / Zoo / LLaMA-Mesh)
+    +-- PCB Stage         -> pcb.py (SKiDL) or .kicad_pcb (KiCad)
+    +-- BOM Stage         -> bom.csv
+    +-- Docs Stage        -> PINOUT.md, ASSEMBLY.md, PRINT_GUIDE.md
+    +-- Viz Stage         -> 3D model / video (Hunyuan3D / Cosmos / LLaMA-Mesh)
+```
+
+The `meshforge-iterate` tool allows patching an existing spec and re-running the pipeline without starting from scratch.
+
+## Backend Configuration
+
+Each pipeline stage has a default backend and optional alternatives. Backends are selected via environment variables or per-spec overrides.
+
+| Stage | Env Variable | Default | Alternatives | Requirements |
+|-------|-------------|---------|-------------|--------------|
+| Enclosure | `FORGE_ENCLOSURE_BACKEND` | `openscad` | `cadquery`, `zoo-cad`, `llama-mesh` | OpenSCAD: none (generates .scad). CadQuery: Python 3 + cadquery pip package. Zoo: `ZOO_CAD_API_KEY`. LLaMA-Mesh: `LLAMA_MESH_ENDPOINT`. |
+| PCB | `FORGE_PCB_BACKEND` | `skidl` | `kicad` | SKiDL: generates Python script (execution needs Python + skidl). KiCad: `KICAD_PATH` pointing to kicad-cli. |
+| Visualization | `FORGE_VIZ_BACKEND` | `hunyuan3d` | `cosmos`, `llama-mesh` | All generate placeholders in offline mode. Online mode requires the respective `*_ENDPOINT` env var. |
+| Circuit | (not configurable) | Wokwi JSON | -- | None |
+| Firmware | (not configurable) | Arduino | -- | None (generates source; compilation requires Arduino CLI or PlatformIO) |
+
+See [`.env.example`](.env.example) for all environment variables.
+
+## Troubleshooting
+
+**"Python not found" or CadQuery backend fails**
+- Set `PYTHON_PATH` to your Python 3 interpreter (e.g., `PYTHON_PATH=/usr/local/bin/python3`).
+- Ensure `cadquery` is installed: `pip3 install cadquery`.
+
+**"KiCad not installed" or PCB generation fails with kicad backend**
+- Install KiCad 9 from [kicad.org](https://www.kicad.org/download/).
+- Set `KICAD_PATH` to the CLI binary (e.g., `KICAD_PATH=/usr/bin/kicad-cli` on Linux, `KICAD_PATH=/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli` on macOS).
+
+**Zoo Text-to-CAD returns errors**
+- Verify your API key is valid: `curl -H "Authorization: Bearer $ZOO_CAD_API_KEY" https://api.zoo.dev/user`.
+- Check that `ZOO_CAD_ENDPOINT` is set correctly (default: `https://api.zoo.dev`).
+
+**Enclosure cutouts don't match components**
+- Ensure `componentRef` in each cutout matches a component `id` in the board section.
+- Run `meshforge-validate` to catch mismatches before building.
+
+**Build succeeds but firmware won't compile**
+- MeshCue Forge generates source code, not compiled binaries. You need Arduino CLI or PlatformIO installed to compile.
+- Check that all libraries listed in the MHDL spec are available in your Arduino/PlatformIO environment.
+
+**"I2C address collision" validation error**
+- Two components share the same I2C address. Change the address in the component's `properties.i2cAddress` field, or use different I2C bus pins.
+
+**OpenSCAD rendering is slow**
+- OpenSCAD .scad files are generated instantly. Rendering to STL requires OpenSCAD installed locally (`OPENSCAD_PATH`).
+- For faster iteration, preview in the OpenSCAD GUI before exporting.
+
+## Contributing
+
+MeshCue Forge is MIT licensed and welcomes contributions.
+
+### Adding a New Backend
+
+1. Create a new file in the appropriate `src/backends/` directory (e.g., `src/backends/enclosure/freecad.ts`).
+2. Implement the backend interface matching the existing pattern (see `openscad.ts` or `cadquery.ts` as reference).
+3. Register the backend in the stage's factory/registry.
+4. Add the backend identifier to the relevant type union in `src/schema/mhdl.ts`.
+5. Update `src/config.ts` to detect the new backend's capabilities.
+6. Add tests covering the new backend's output.
+
+### Running Tests
+
+```bash
+npm run build          # Compile TypeScript
+npm test               # Run all tests
+npx tsx test.ts        # Run integration tests
+npm run typecheck      # Type-check without emitting
+npm run lint           # ESLint
+npm run format:check   # Prettier check
+```
+
+### Submitting PRs
+
+1. Fork the repo and create a feature branch from `main`.
+2. Follow the existing code style (TypeScript strict mode, ESLint + Prettier).
+3. Include tests for new functionality.
+4. Run `npm run typecheck && npm run lint && npm test` before submitting.
+5. Keep PRs focused: one backend, one feature, or one fix per PR.
+
+### Contribution Ideas
+
+- **New component templates** -- add support for more sensors, displays, actuators.
+- **Backend plugins** -- MicroPython firmware, FreeCAD enclosures, EasyEDA PCBs.
+- **Board templates** -- pre-built MHDL specs for common projects.
+- **Validation rules** -- more DRC checks (thermal analysis, signal integrity).
+- **MHDL schema extensions** -- new fields for advanced use cases.
+
+## Known Limitations
+
+- **Keyword-based NL parsing**: The `meshforge-describe` tool uses keyword matching, not a full NLU model. Complex or ambiguous descriptions may produce incomplete specs. Iterate with `meshforge-iterate` to refine.
+- **Arduino-only firmware generation**: Only Arduino/C++ firmware is generated currently. MicroPython and ESP-IDF support are planned but not yet implemented.
+- **No compiled output**: Forge generates source files (`.ino`, `.scad`, `.py`), not compiled binaries or rendered STLs. You need the respective toolchains installed locally to compile/render.
+- **Wokwi-only circuit output**: Circuit diagrams are generated in Wokwi JSON format only. Fritzing and SPICE export are planned.
+- **2-layer PCB only**: SKiDL backend currently generates 2-layer PCBs. 4-layer support is defined in the schema but not yet implemented.
+- **AI backends require external servers**: Zoo Text-to-CAD, LLaMA-Mesh, Hunyuan3D, and Cosmos all require external API endpoints. Without them, Forge operates in offline mode with template-based generation.
+- **Limited component library**: While many common components are supported, some specialized parts (e.g., specific sensor models) may need to be defined as `custom` type with manual pin configuration.
+
 ## License
 
 MIT

@@ -10,8 +10,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { writeFile, readFile, mkdir, readdir } from "node:fs/promises";
+import { join, isAbsolute, basename } from "node:path";
+import { writeFile, readFile, mkdir, readdir, access } from "node:fs/promises";
 
 import type {
   MHDLDocument,
@@ -244,12 +244,62 @@ function generateKiCadPCBContent(doc: MHDLDocument): string {
   return sections.join("\n");
 }
 
+// ─── KiCad Path Validation ───────────────────────────────────
+
+/** Shell metacharacters that must not appear in executable paths. */
+const SHELL_META = /[;|&$`\\!(){}<>'"*?#~\n\r]/;
+
+/** Path traversal sequences. */
+const PATH_TRAVERSAL = /(?:^|\/)\.\.(?:\/|$)/;
+
+/**
+ * Validate a KiCad CLI path before execution.
+ *
+ * Ensures the path:
+ *   - Contains no shell metacharacters
+ *   - Does not use path traversal (../)
+ *   - Is either an absolute path (that exists on disk) or a simple command name
+ */
+async function validateKicadPath(kicadPath: string): Promise<void> {
+  if (SHELL_META.test(kicadPath)) {
+    throw new Error(
+      `Invalid KiCad path: contains shell metacharacters — "${kicadPath}"`,
+    );
+  }
+
+  if (PATH_TRAVERSAL.test(kicadPath)) {
+    throw new Error(
+      `Invalid KiCad path: contains path traversal — "${kicadPath}"`,
+    );
+  }
+
+  if (isAbsolute(kicadPath)) {
+    // Absolute path — verify the directory exists on disk
+    try {
+      await access(kicadPath);
+    } catch {
+      throw new Error(
+        `Invalid KiCad path: directory does not exist — "${kicadPath}"`,
+      );
+    }
+  } else {
+    // Must be a simple directory or command name (no slashes except trailing)
+    const cleaned = kicadPath.replace(/\/+$/, "");
+    if (cleaned !== basename(cleaned)) {
+      throw new Error(
+        `Invalid KiCad path: relative paths with directories are not allowed — "${kicadPath}". Use an absolute path or a simple command name.`,
+      );
+    }
+  }
+}
+
 // ─── KiCad CLI Wrappers ─────────────────────────────────────
 
 async function runKiCadCli(
   kicadPath: string,
   args: string[],
 ): Promise<{ stdout: string; stderr: string }> {
+  await validateKicadPath(kicadPath);
   const cliPath = join(kicadPath, "kicad-cli");
   try {
     const { stdout, stderr } = await execFileAsync(cliPath, args, {

@@ -6,6 +6,7 @@
  */
 
 import type { MHDLDocument, BuildArtifact, ForgeConfig } from "../../schema/mhdl.js";
+import { fetchWithRetry, classifyHttpError } from "../../utils/fetch-retry.js";
 
 // ─── Prompt Builder ────────────────────────────────────────
 
@@ -112,19 +113,21 @@ async function pollForCompletion(
   const endpoint = config.zooCadEndpoint || "https://api.zoo.dev";
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `${endpoint}/ai/text-to-cad/${taskId}`,
       {
         method: "GET",
         headers: {
           Authorization: `Bearer ${config.zooCadApiKey}`,
         },
-      }
+      },
+      { timeoutMs: 30_000, maxRetries: 2, baseDelayMs: 1_000 },
     );
 
     if (!res.ok) {
+      const classified = classifyHttpError(res.status, "Zoo");
       throw new Error(
-        `Zoo API poll failed (HTTP ${res.status}): ${await res.text()}`
+        classified || `Zoo API poll failed (HTTP ${res.status}): ${await res.text()}`
       );
     }
 
@@ -157,12 +160,12 @@ export async function generateZooCadEnclosure(
 ): Promise<BuildArtifact[]> {
   const endpoint = config.zooCadEndpoint || "https://api.zoo.dev";
 
-  if (!config.zooCadApiKey) {
+  if (!config.zooCadApiKey || typeof config.zooCadApiKey !== "string" || config.zooCadApiKey.trim().length === 0) {
     return [
       {
         stage: "enclosure",
         filename: "enclosure-zoo-cad-error.txt",
-        content: "Error: ZOO_CAD_API_KEY is not configured. Set the environment variable to use the Zoo Text-to-CAD backend.",
+        content: "Error: ZOO_CAD_API_KEY is not configured or is empty. Set the environment variable to a valid API key to use the Zoo Text-to-CAD backend.",
         format: "step",
         contentType: "text",
         backend: "zoo-cad",
@@ -174,20 +177,25 @@ export async function generateZooCadEnclosure(
 
   try {
     // Submit the text-to-CAD request
-    const submitRes = await fetch(`${endpoint}/ai/text-to-cad`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.zooCadApiKey}`,
-        "Content-Type": "application/json",
+    const submitRes = await fetchWithRetry(
+      `${endpoint}/ai/text-to-cad`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.zooCadApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          output_format: "step",
+          prompt,
+        }),
       },
-      body: JSON.stringify({
-        output_format: "step",
-        prompt,
-      }),
-    });
+      { timeoutMs: 30_000, maxRetries: 2, baseDelayMs: 1_000 },
+    );
 
     if (!submitRes.ok) {
-      const errorBody = await submitRes.text();
+      const classified = classifyHttpError(submitRes.status, "Zoo");
+      const errorBody = classified || await submitRes.text();
       return [
         {
           stage: "enclosure",

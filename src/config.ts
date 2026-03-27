@@ -6,6 +6,70 @@
  */
 
 import type { ForgeConfig, EnclosureBackend, PCBBackend, VisualizationBackend } from "./schema/mhdl.js";
+import { checkPythonPackage } from "./python/bridge.js";
+
+// ─── Endpoint Health Check ──────────────────────────────────
+
+export interface EndpointStatus {
+  endpoint: string;
+  status: "ok" | "unreachable" | "error";
+  message?: string;
+}
+
+/**
+ * Validate reachability of all configured API endpoints.
+ * Performs a HEAD request with a 5-second timeout against each.
+ * Does not run automatically — exported for use by the MCP capabilities tool.
+ */
+export async function validateEndpoints(config: ForgeConfig): Promise<EndpointStatus[]> {
+  const endpoints: { name: string; url: string | undefined }[] = [
+    { name: "zoo-cad", url: config.zooCadEndpoint },
+    { name: "llama-mesh", url: config.llamaMeshEndpoint },
+    { name: "hunyuan3d", url: config.hunyuan3dEndpoint },
+    { name: "cosmos", url: config.cosmosEndpoint },
+  ];
+
+  const results: EndpointStatus[] = [];
+
+  for (const ep of endpoints) {
+    if (!ep.url) {
+      results.push({ endpoint: ep.name, status: "unreachable", message: "Not configured" });
+      continue;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5_000);
+
+    try {
+      const res = await fetch(ep.url, {
+        method: "HEAD",
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok || res.status === 405 || res.status === 404) {
+        // 405/404 means server is reachable but doesn't support HEAD on that path
+        results.push({ endpoint: ep.name, status: "ok" });
+      } else {
+        results.push({
+          endpoint: ep.name,
+          status: "error",
+          message: `HTTP ${res.status}`,
+        });
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        results.push({ endpoint: ep.name, status: "unreachable", message: "Timed out (5s)" });
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        results.push({ endpoint: ep.name, status: "unreachable", message: msg });
+      }
+    }
+  }
+
+  return results;
+}
 
 // ─── Load Config from Environment ───────────────────────────
 
@@ -46,15 +110,24 @@ export interface BackendRegistry {
   visualization: Record<VisualizationBackend, BackendCapability>;
 }
 
-export function detectCapabilities(config: ForgeConfig): BackendRegistry {
+export async function detectCapabilities(config: ForgeConfig): Promise<BackendRegistry> {
+  // Check Python packages in parallel — these indicate whether generated
+  // scripts can be *executed* locally, but script generation always works.
+  const [cadqueryInstalled, skidlInstalled] = await Promise.all([
+    checkPythonPackage("cadquery", config.pythonPath),
+    checkPythonPackage("skidl", config.pythonPath),
+  ]);
+
   return {
     enclosure: {
       openscad: { name: "OpenSCAD", available: true, online: true },
       cadquery: {
         name: "CadQuery",
-        available: true, // Script generation always works; execution requires Python
-        online: !!config.pythonPath,
-        reason: config.pythonPath ? undefined : "Python not configured",
+        available: true, // Script generation always works
+        online: cadqueryInstalled, // Execution requires package
+        reason: !cadqueryInstalled
+          ? "cadquery package not installed — script generation works, execution requires: pip install cadquery"
+          : undefined,
       },
       "zoo-cad": {
         name: "Zoo Text-to-CAD",
@@ -73,7 +146,10 @@ export function detectCapabilities(config: ForgeConfig): BackendRegistry {
       skidl: {
         name: "SKiDL",
         available: true, // Script generation always works
-        online: true,
+        online: skidlInstalled, // Execution requires package
+        reason: !skidlInstalled
+          ? "skidl package not installed — script generation works, execution requires: pip install skidl"
+          : undefined,
       },
       kicad: {
         name: "KiCad 9",

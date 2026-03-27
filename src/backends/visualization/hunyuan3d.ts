@@ -6,6 +6,7 @@
  */
 
 import type { MHDLDocument, BuildArtifact, ForgeConfig } from "../../schema/mhdl.js";
+import { fetchWithRetry, classifyHttpError } from "../../utils/fetch-retry.js";
 
 // ─── Prompt Builder ─────────────────────────────────────────
 
@@ -190,19 +191,24 @@ export async function generateHunyuan3DModel(
   const prompt = buildPrompt(doc);
 
   try {
-    const response = await fetch(config.hunyuan3dEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: prompt,
-        num_steps: 50,
-        guidance_scale: 7.5,
-        output_format: "glb",
-      }),
-    });
+    const response = await fetchWithRetry(
+      config.hunyuan3dEndpoint,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: prompt,
+          num_steps: 50,
+          guidance_scale: 7.5,
+          output_format: "glb",
+        }),
+      },
+      { timeoutMs: 30_000, maxRetries: 2, baseDelayMs: 1_000 },
+    );
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
+      const classified = classifyHttpError(response.status, "Hunyuan3D");
+      const errorText = classified || await response.text().catch(() => "Unknown error");
       return [
         {
           stage: "visualization",

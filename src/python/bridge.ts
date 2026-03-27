@@ -6,9 +6,13 @@
  */
 
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { readdir, unlink } from "node:fs/promises";
+import { join } from "node:path";
 
 const DEFAULT_PYTHON = "python3";
 const DEFAULT_TIMEOUT_MS = 30_000;
+const SIGKILL_GRACE_MS = 3_000;
 
 export interface PythonResult {
   stdout: string;
@@ -41,9 +45,18 @@ export async function runPython(
     proc.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
     proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
-    // Enforce timeout
+    // Enforce timeout: SIGTERM first, then SIGKILL after grace period
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
-      proc.kill("SIGKILL");
+      proc.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        // Process did not exit after SIGTERM; force kill
+        proc.kill("SIGKILL");
+      }, SIGKILL_GRACE_MS);
+
+      // Clean up any temp files left by the Python process
+      cleanupTempFiles().catch(() => {});
+
       reject(
         new Error(
           `Python process timed out after ${DEFAULT_TIMEOUT_MS / 1000}s`,
@@ -53,11 +66,13 @@ export async function runPython(
 
     proc.on("error", (err) => {
       clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       reject(new Error(`Failed to spawn Python (${python}): ${err.message}`));
     });
 
     proc.on("close", (code) => {
       clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       resolve({
         stdout: Buffer.concat(stdoutChunks).toString("utf-8"),
         stderr: Buffer.concat(stderrChunks).toString("utf-8"),
@@ -69,6 +84,19 @@ export async function runPython(
     proc.stdin.write(script);
     proc.stdin.end();
   });
+}
+
+/**
+ * Clean up any temp files left behind by timed-out Python processes.
+ * Removes files matching the meshforge-py-* pattern in the OS temp directory.
+ */
+async function cleanupTempFiles(): Promise<void> {
+  const tmp = tmpdir();
+  const entries = await readdir(tmp);
+  const stale = entries.filter((e) => e.startsWith("meshforge-py-"));
+  await Promise.all(
+    stale.map((f) => unlink(join(tmp, f)).catch(() => {})),
+  );
 }
 
 /**

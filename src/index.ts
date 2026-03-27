@@ -128,8 +128,11 @@ server.tool(
                   errors: result.validation.issues.filter(
                     (i) => i.severity === "error"
                   ),
+                  failedStages: result.failedStages,
                   message:
-                    "Build failed — fix validation errors and retry",
+                    result.failedStages.length > 0
+                      ? `Build failed — ${result.failedStages.length} stage(s) errored: ${result.failedStages.map(f => f.stage).join(", ")}`
+                      : "Build failed — fix validation errors and retry",
                 },
                 null,
                 2
@@ -145,6 +148,7 @@ server.tool(
         success: true,
         buildTime: `${result.buildTime}ms`,
         progress: progressLog,
+        failedStages: result.failedStages,
         stats: result.validation.stats,
         warnings: result.validation.issues.filter(
           (i) => i.severity === "warning"
@@ -349,7 +353,7 @@ server.tool(
   {},
   async () => {
     const config = loadConfig();
-    const registry = detectCapabilities(config);
+    const registry = await detectCapabilities(config);
 
     return {
       content: [

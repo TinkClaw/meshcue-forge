@@ -6,6 +6,7 @@
  */
 
 import type { MHDLDocument, BuildArtifact, ForgeConfig } from "../../schema/mhdl.js";
+import { fetchWithRetry, classifyHttpError } from "../../utils/fetch-retry.js";
 
 // ─── Prompt Builder ────────────────────────────────────────
 
@@ -197,19 +198,24 @@ export async function generateLlamaMeshEnclosure(
   const prompt = buildMeshPrompt(doc);
 
   try {
-    const res = await fetch(config.llamaMeshEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const res = await fetchWithRetry(
+      config.llamaMeshEndpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt,
+          max_tokens: 8192,
+        }),
       },
-      body: JSON.stringify({
-        prompt,
-        max_tokens: 8192,
-      }),
-    });
+      { timeoutMs: 30_000, maxRetries: 2, baseDelayMs: 1_000 },
+    );
 
     if (!res.ok) {
-      const errorBody = await res.text();
+      const classified = classifyHttpError(res.status, "LLaMA-Mesh");
+      const errorBody = classified || await res.text();
       return [
         {
           stage: "enclosure",

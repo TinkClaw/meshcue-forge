@@ -812,6 +812,20 @@ function parseName(description: string): string {
 
 // ─── Main Describe Function ─────────────────────────────────
 
+// ─── MCU Power Budgets ───────────────────────────────────────
+
+const MCU_POWER_BUDGET: Record<string, { maxCurrentMa: number; gpioVoltage: number }> = {
+  esp32:          { maxCurrentMa: 500, gpioVoltage: 3.3 },
+  "esp32-s3":     { maxCurrentMa: 500, gpioVoltage: 3.3 },
+  "esp32-c3":     { maxCurrentMa: 400, gpioVoltage: 3.3 },
+  "arduino-uno":  { maxCurrentMa: 500, gpioVoltage: 5 },
+  "arduino-nano": { maxCurrentMa: 200, gpioVoltage: 5 },
+  "arduino-mega": { maxCurrentMa: 500, gpioVoltage: 5 },
+  rp2040:         { maxCurrentMa: 300, gpioVoltage: 3.3 },
+  stm32:          { maxCurrentMa: 300, gpioVoltage: 3.3 },
+  attiny85:       { maxCurrentMa: 200, gpioVoltage: 5 },
+};
+
 export function describe(naturalLanguage: string): MHDLDocument {
   const archetype = resolveArchetype(naturalLanguage);
   const mcuFamily = parseMCU(naturalLanguage, archetype);
@@ -819,6 +833,7 @@ export function describe(naturalLanguage: string): MHDLDocument {
   const parsedComponents = parseComponents(naturalLanguage, archetype);
   const allocator = new GPIOAllocator(mcuFamily);
   const name = parseName(naturalLanguage);
+  const powerBudget = MCU_POWER_BUDGET[mcuFamily] || { maxCurrentMa: 500, gpioVoltage: 3.3 };
 
   // Build MCU
   const mcu: MCU = {
@@ -917,8 +932,8 @@ export function describe(naturalLanguage: string): MHDLDocument {
       power: {
         source: "usb",
         voltageIn: 5,
-        regulatorOut: 3.3,
-        maxCurrentMa: 500,
+        regulatorOut: powerBudget.gpioVoltage < 5 ? powerBudget.gpioVoltage : undefined,
+        maxCurrentMa: powerBudget.maxCurrentMa,
       },
       dimensions: {
         widthMm: boardW,
