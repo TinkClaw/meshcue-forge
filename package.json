@@ -1,0 +1,41 @@
+{
+  "name": "@meshcue/forge",
+  "version": "0.1.0",
+  "description": "MeshCue Forge — the hardware compiler. Describe it, build it, print it.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "meshcue-forge": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "keywords": [
+    "hardware",
+    "mcp",
+    "circuit",
+    "firmware",
+    "3d-printing",
+    "enclosure",
+    "esp32",
+    "arduino",
+    "kicad",
+    "openscad"
+  ],
+  "author": "TinkClaw",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,393 @@
+{
+  "meta": {
+    "schemaVersion": "0.1.0",
+    "name": "MeshCue Node",
+    "description": "Dedicated hardware node for the MeshCue decentralized mesh network. Runs 24/7, relays signals, participates in consensus, and displays live mesh status. Designed to be 3D printed and assembled at home.",
+    "version": "1.0.0",
+    "license": "MIT",
+    "author": "TinkClaw",
+    "url": "https://github.com/tinkclaw/meshforge",
+    "tags": [
+      "mesh",
+      "p2p",
+      "iot",
+      "esp32",
+      "trading-signals"
+    ]
+  },
+  "board": {
+    "mcu": {
+      "id": "mcu",
+      "type": "mcu",
+      "family": "esp32-s3",
+      "model": "ESP32-S3-DevKitC-1",
+      "clockMhz": 240,
+      "flashKb": 8192,
+      "ramKb": 512,
+      "wireless": [
+        "wifi",
+        "ble"
+      ],
+      "pins": [
+        {
+          "id": "led_green_anode",
+          "gpio": 1,
+          "mode": "digital-out",
+          "label": "→ led_green"
+        },
+        {
+          "id": "led_yellow_anode",
+          "gpio": 2,
+          "mode": "digital-out",
+          "label": "→ led_yellow"
+        },
+        {
+          "id": "led_red_anode",
+          "gpio": 3,
+          "mode": "digital-out",
+          "label": "→ led_red"
+        },
+        {
+          "id": "oled_sda",
+          "gpio": 8,
+          "mode": "i2c-sda",
+          "label": "→ oled"
+        },
+        {
+          "id": "oled_scl",
+          "gpio": 9,
+          "mode": "i2c-scl",
+          "label": "→ oled"
+        },
+        {
+          "id": "btn_pair_sig",
+          "gpio": 4,
+          "mode": "digital-in",
+          "label": "→ btn_pair"
+        },
+        {
+          "id": "btn_reset_sig",
+          "gpio": 5,
+          "mode": "digital-in",
+          "label": "→ btn_reset"
+        },
+        {
+          "id": "buzzer_sig",
+          "gpio": 6,
+          "mode": "pwm",
+          "label": "→ buzzer"
+        }
+      ]
+    },
+    "components": [
+      {
+        "id": "led_green",
+        "type": "led",
+        "pins": [
+          {
+            "id": "anode",
+            "mode": "digital-out",
+            "gpio": 1
+          },
+          {
+            "id": "cathode",
+            "mode": "ground"
+          }
+        ],
+        "properties": {
+          "color": "green"
+        }
+      },
+      {
+        "id": "led_yellow",
+        "type": "led",
+        "pins": [
+          {
+            "id": "anode",
+            "mode": "digital-out",
+            "gpio": 2
+          },
+          {
+            "id": "cathode",
+            "mode": "ground"
+          }
+        ],
+        "properties": {
+          "color": "yellow"
+        }
+      },
+      {
+        "id": "led_red",
+        "type": "led",
+        "pins": [
+          {
+            "id": "anode",
+            "mode": "digital-out",
+            "gpio": 3
+          },
+          {
+            "id": "cathode",
+            "mode": "ground"
+          }
+        ],
+        "properties": {
+          "color": "red"
+        }
+      },
+      {
+        "id": "oled",
+        "type": "oled",
+        "pins": [
+          {
+            "id": "sda",
+            "mode": "i2c-sda",
+            "gpio": 8
+          },
+          {
+            "id": "scl",
+            "mode": "i2c-scl",
+            "gpio": 9
+          },
+          {
+            "id": "vcc",
+            "mode": "power"
+          },
+          {
+            "id": "gnd",
+            "mode": "ground"
+          }
+        ],
+        "properties": {
+          "i2cAddress": "0x3C",
+          "width": 128,
+          "height": 64,
+          "startupText": "MeshCue v1.0"
+        }
+      },
+      {
+        "id": "btn_pair",
+        "type": "button",
+        "pins": [
+          {
+            "id": "sig",
+            "mode": "digital-in",
+            "gpio": 4
+          },
+          {
+            "id": "gnd",
+            "mode": "ground"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "btn_reset",
+        "type": "button",
+        "pins": [
+          {
+            "id": "sig",
+            "mode": "digital-in",
+            "gpio": 5
+          },
+          {
+            "id": "gnd",
+            "mode": "ground"
+          }
+        ],
+        "properties": {}
+      },
+      {
+        "id": "buzzer",
+        "type": "buzzer",
+        "pins": [
+          {
+            "id": "sig",
+            "mode": "pwm",
+            "gpio": 6
+          },
+          {
+            "id": "gnd",
+            "mode": "ground"
+          }
+        ],
+        "properties": {}
+      }
+    ],
+    "connections": [
+      {
+        "from": "mcu.led_green_anode",
+        "to": "led_green.anode",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.led_yellow_anode",
+        "to": "led_yellow.anode",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.led_red_anode",
+        "to": "led_red.anode",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.oled_sda",
+        "to": "oled.sda",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.oled_scl",
+        "to": "oled.scl",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.btn_pair_sig",
+        "to": "btn_pair.sig",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.btn_reset_sig",
+        "to": "btn_reset.sig",
+        "type": "wire"
+      },
+      {
+        "from": "mcu.buzzer_sig",
+        "to": "buzzer.sig",
+        "type": "wire"
+      }
+    ],
+    "power": {
+      "source": "usb",
+      "voltageIn": 5,
+      "regulatorOut": 3.3,
+      "maxCurrentMa": 1000
+    },
+    "dimensions": {
+      "widthMm": 70,
+      "heightMm": 45,
+      "depthMm": 25
+    },
+    "mountingHoles": {
+      "diameterMm": 3,
+      "positions": [
+        {
+          "x": 4,
+          "y": 4
+        },
+        {
+          "x": 66,
+          "y": 4
+        },
+        {
+          "x": 4,
+          "y": 41
+        },
+        {
+          "x": 66,
+          "y": 41
+        }
+      ]
+    }
+  },
+  "firmware": {
+    "framework": "arduino",
+    "entrypoint": "main.ino",
+    "libraries": [
+      {
+        "name": "Adafruit_SSD1306",
+        "source": "arduino"
+      },
+      {
+        "name": "Adafruit_GFX",
+        "source": "arduino"
+      },
+      {
+        "name": "WiFi",
+        "source": "arduino"
+      },
+      {
+        "name": "WiFiClientSecure",
+        "source": "arduino"
+      },
+      {
+        "name": "ArduinoJson",
+        "version": "7.0.0",
+        "source": "arduino"
+      },
+      {
+        "name": "Crypto",
+        "source": "arduino"
+      }
+    ],
+    "features": [
+      "wifi-mesh",
+      "udp-multicast-discovery",
+      "tcp-tls-mesh-protocol",
+      "x25519-key-exchange",
+      "aes256-gcm-encryption",
+      "signal-display",
+      "peer-status",
+      "ota-updates"
+    ]
+  },
+  "enclosure": {
+    "type": "snap-fit",
+    "wallThicknessMm": 2.5,
+    "cornerRadiusMm": 3,
+    "cutouts": [
+      {
+        "type": "led-hole",
+        "componentRef": "led_green",
+        "wall": "front"
+      },
+      {
+        "type": "led-hole",
+        "componentRef": "led_yellow",
+        "wall": "front"
+      },
+      {
+        "type": "led-hole",
+        "componentRef": "led_red",
+        "wall": "front"
+      },
+      {
+        "type": "oled-window",
+        "componentRef": "oled",
+        "wall": "front"
+      },
+      {
+        "type": "button-cap",
+        "componentRef": "btn_pair",
+        "wall": "front"
+      },
+      {
+        "type": "button-cap",
+        "componentRef": "btn_reset",
+        "wall": "front"
+      },
+      {
+        "type": "usb-c",
+        "componentRef": "mcu",
+        "wall": "back"
+      }
+    ],
+    "mounts": "m3-inserts",
+    "ventilation": true,
+    "labelEmboss": "MeshCue",
+    "material": "petg",
+    "printOrientation": "upright"
+  },
+  "bom": {
+    "auto": true,
+    "preferredSuppliers": [
+      "digikey",
+      "mouser"
+    ]
+  },
+  "docs": {
+    "generatePinout": true,
+    "generateAssembly": true,
+    "generateBOM": true,
+    "generatePrintGuide": true,
+    "readme": true
+  }
+}

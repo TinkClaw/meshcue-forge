@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "author": "MeshCue Forge",
+  "editor": "meshforge",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "mcu",
+      "top": 0,
+      "left": 0
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_green",
+      "top": 100,
+      "left": 50,
+      "attrs": {
+        "color": "green"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_yellow",
+      "top": 180,
+      "left": 50,
+      "attrs": {
+        "color": "yellow"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_red",
+      "top": 260,
+      "left": 50,
+      "attrs": {
+        "color": "red"
+      }
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled",
+      "top": 340,
+      "left": 50
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_pair",
+      "top": 420,
+      "left": 50
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_reset",
+      "top": 500,
+      "left": 50
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 100,
+      "left": 300
+    }
+  ],
+  "connections": [
+    {
+      "from": "mcu:led_green_anode",
+      "to": "led_green:anode",
+      "color": "green"
+    },
+    {
+      "from": "mcu:led_yellow_anode",
+      "to": "led_yellow:anode",
+      "color": "green"
+    },
+    {
+      "from": "mcu:led_red_anode",
+      "to": "led_red:anode",
+      "color": "green"
+    },
+    {
+      "from": "mcu:oled_sda",
+      "to": "oled:sda",
+      "color": "blue"
+    },
+    {
+      "from": "mcu:oled_scl",
+      "to": "oled:scl",
+      "color": "purple"
+    },
+    {
+      "from": "mcu:btn_pair_sig",
+      "to": "btn_pair:sig",
+      "color": "cyan"
+    },
+    {
+      "from": "mcu:btn_reset_sig",
+      "to": "btn_reset:sig",
+      "color": "cyan"
+    },
+    {
+      "from": "mcu:buzzer_sig",
+      "to": "buzzer:sig",
+      "color": "orange"
+    }
+  ]
+}
