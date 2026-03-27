@@ -28,7 +28,7 @@ function err(msg: string) {
 // ─── Tool Registration ────────────────────────────────────────
 
 export function registerRAMTools(server: McpServer): void {
-  const store = new RAMStore();
+  const store = new RAMStore(process.env.MESHCUE_DB_PATH);
 
   // ── meshcue-ram-register-asset ──────────────────────────────
 

@@ -17,15 +17,30 @@ spec:
       labels:
         app: forge
     spec:
+      serviceAccountName: forge
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 30
       containers:
         - name: forge
-          image: ghcr.io/tinkclaw/meshcue-forge:latest
+          image: ghcr.io/tinkclaw/meshcue-forge:0.1.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 3000
               name: mcp
               protocol: TCP
             - containerPort: 8080
               name: health
+              protocol: TCP
+            - containerPort: 8081
+              name: webhook
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -35,10 +50,10 @@ spec:
           resources:
             requests:
               memory: "256Mi"
-              cpu: "250m"
+              cpu: "200m"
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
+              memory: "512Mi"
+              cpu: "500m"
           livenessProbe:
             httpGet:
               path: /health

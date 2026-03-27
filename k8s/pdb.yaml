@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: forge-pdb
+  namespace: meshcue
+  labels:
+    app: forge
+    app.kubernetes.io/name: forge
+    app.kubernetes.io/part-of: meshcue
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: forge

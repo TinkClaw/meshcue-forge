@@ -1,0 +1,52 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forge-netpol
+  namespace: meshcue
+  labels:
+    app: forge
+    app.kubernetes.io/name: forge
+    app.kubernetes.io/part-of: meshcue
+spec:
+  podSelector:
+    matchLabels:
+      app: forge
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow health probes from kube-system (kubelet)
+    - ports:
+        - port: 8080
+          protocol: TCP
+    # Allow webhook traffic from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8081
+          protocol: TCP
+    # Allow MCP traffic within namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 3000
+          protocol: TCP
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow HTTPS (external APIs — Africa's Talking, Twilio, Meta)
+    - ports:
+        - port: 443
+          protocol: TCP
+    # Allow mesh network WebSocket
+    - ports:
+        - port: 9871
+          protocol: TCP

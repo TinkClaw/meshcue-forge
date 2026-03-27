@@ -7,3 +7,6 @@ dist/
 .env.*
 *.pem
 *.key
+
+# Never commit real k8s secrets
+k8s/secret.yaml

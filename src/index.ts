@@ -487,25 +487,70 @@ const healthServer = createServer((req, res) => {
   }
 });
 
+// ─── Startup Validation ──────────────────────────────────────
+
+function validateEnv(): void {
+  const dbPath = process.env.MESHCUE_DB_PATH;
+  if (!dbPath) {
+    console.warn(
+      "[startup] MESHCUE_DB_PATH not set — data will NOT persist across restarts. " +
+      "Set MESHCUE_DB_PATH for production use.",
+    );
+  }
+}
+
+// ─── Graceful Shutdown ──────────────────────────────────────
+
+let shuttingDown = false;
+const servers: { health?: ReturnType<typeof createServer>; webhook?: ReturnType<typeof createServer> } = {};
+
+function gracefulShutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.error(`[shutdown] ${signal} received — closing servers...`);
+
+  // Close HTTP servers (stop accepting new connections)
+  if (servers.health) servers.health.close();
+  if (servers.webhook) servers.webhook.close();
+
+  // Allow in-flight requests 5s to complete
+  setTimeout(() => {
+    console.error("[shutdown] Complete.");
+    process.exit(0);
+  }, 5_000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// Global unhandled rejection handler — log and exit cleanly
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] Unhandled Promise Rejection:", reason);
+  process.exit(1);
+});
+
 // ─── Start Server ────────────────────────────────────────────
 
 async function main() {
+  validateEnv();
+
   // Start health check server (non-blocking, for Docker/k8s probes)
   healthServer.listen(HEALTH_PORT, "0.0.0.0", () => {
-    console.error(`Health endpoint: http://0.0.0.0:${HEALTH_PORT}/health`);
+    console.error(`[startup] Health endpoint: http://0.0.0.0:${HEALTH_PORT}/health`);
   });
+  servers.health = healthServer;
 
   // Start webhook server for incoming SMS/WhatsApp/USSD callbacks
   const webhookPort = parseInt(process.env.MESHCUE_WEBHOOK_PORT || "8081", 10);
-  startWebhookServer(webhookPort);
+  servers.webhook = startWebhookServer(webhookPort);
 
   // Start MCP stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MeshCue Forge + Connect + RAM MCP server running — forge.meshcue.com");
+  console.error("[startup] MeshCue Forge + Connect + RAM MCP server running — forge.meshcue.com");
 }
 
 main().catch((err) => {
-  console.error("Fatal:", err);
+  console.error("[FATAL]", err);
   process.exit(1);
 });

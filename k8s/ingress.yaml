@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forge-ingress
+  namespace: meshcue
+  labels:
+    app: forge
+    app.kubernetes.io/name: forge
+    app.kubernetes.io/part-of: meshcue
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - forge.meshcue.com
+      secretName: forge-tls
+  rules:
+    - host: forge.meshcue.com
+      http:
+        paths:
+          - path: /webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: forge
+                port:
+                  name: webhook

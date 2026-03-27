@@ -14,7 +14,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { createRouter } from "./router.js";
 import { ConnectStore } from "./store.js";
 import { loadConnectConfig } from "./config.js";
@@ -33,7 +33,16 @@ function getStore(): ConnectStore {
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_BODY_SIZE) {
+        req.destroy();
+        reject(new Error("Payload too large"));
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
@@ -91,7 +100,7 @@ async function handleSMS(req: IncomingMessage, res: ServerResponse): Promise<voi
 
       // Store the inbound message
       s.storeMessage({
-        id: messageId || crypto.randomUUID(),
+        id: messageId || randomUUID(),
         clinicId,
         patientId: patient!.id,
         direction: "patient_to_clinic",
@@ -114,8 +123,9 @@ async function handleSMS(req: IncomingMessage, res: ServerResponse): Promise<voi
     }
   }
 
-  // Unknown sender — log and acknowledge
-  console.error(`[webhook/sms] Unknown sender: ${from} — "${text.substring(0, 50)}"`);
+  // Unknown sender — log and acknowledge (redact PII)
+  const redactedPhone = from.length > 4 ? from.slice(0, -4).replace(/\d/g, "*") + from.slice(-4) : "****";
+  console.error(`[webhook/sms] Unknown sender: ${redactedPhone}`);
   json(res, 200, { status: "unregistered", from });
 }
 
@@ -209,7 +219,7 @@ async function handleWhatsApp(req: IncomingMessage, res: ServerResponse): Promis
               await router.handleIncoming("whatsapp", from, text, patient.clinicId);
 
               s.storeMessage({
-                id: String(msg.id || crypto.randomUUID()),
+                id: String(msg.id || randomUUID()),
                 clinicId: patient.clinicId,
                 patientId: patient.id,
                 direction: "patient_to_clinic",
@@ -265,12 +275,17 @@ async function handleVoice(req: IncomingMessage, res: ServerResponse): Promise<v
 
 // ─── Webhook Router ──────────────────────────────────────────
 
-export function startWebhookServer(port: number): void {
+const MAX_BODY_SIZE = 1_000_000; // 1MB — prevent DoS via mega-payloads
+
+export function startWebhookServer(port: number): ReturnType<typeof createServer> {
   const server = createServer(async (req, res) => {
     // CORS headers for Meta webhook verification
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Hub-Signature-256");
+    const allowedOrigin = process.env.MESHCUE_CORS_ORIGIN || "";
+    if (allowedOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Hub-Signature-256");
+    }
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -299,6 +314,8 @@ export function startWebhookServer(port: number): void {
   });
 
   server.listen(port, "0.0.0.0", () => {
-    console.error(`Webhook server: http://0.0.0.0:${port}/webhook/{sms,ussd,whatsapp,voice}`);
+    console.error(`[webhook] Listening on http://0.0.0.0:${port}/webhook/{sms,ussd,whatsapp,voice}`);
   });
+
+  return server;
 }

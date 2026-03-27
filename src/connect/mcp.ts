@@ -25,6 +25,7 @@ import {
   authenticateToolCall,
   type AuditEntry,
 } from "./auth.js";
+import { ConnectStore as PersistentStore } from "./store.js";
 
 // ─── Clinic Types ────────────────────────────────────────────
 
@@ -93,13 +94,20 @@ const TIER_LIMITS: Record<string, { patients: number; messagesPerMonth: number; 
   enterprise:   { patients: -1,    messagesPerMonth: -1,     devices: -1,    channels: 3 },
 };
 
-// ─── Shared In-Memory Store ──────────────────────────────────
+// ─── Shared Store (in-memory cache + SQLite persistence) ─────
 
 class ConnectStore {
   readonly clinics = new Map<string, Clinic>();
   readonly patients = new Map<string, PatientContact>();
   readonly messages: ConnectMessage[] = [];
   readonly alerts: ClinicAlert[] = [];
+
+  /** SQLite-backed persistent store — shared with webhook server */
+  private persistent: PersistentStore;
+
+  constructor(dbPath?: string) {
+    this.persistent = new PersistentStore(dbPath);
+  }
 
   getClinic(clinicId: string): Clinic | undefined {
     return this.clinics.get(clinicId);
@@ -111,6 +119,49 @@ class ConnectStore {
       throw new Error(`Clinic not found: ${clinicId}`);
     }
     return clinic;
+  }
+
+  /** Register a clinic in both local cache and SQLite */
+  setClinic(clinicId: string, clinic: Clinic): void {
+    this.clinics.set(clinicId, clinic);
+    // Sync to SQLite so webhooks can see it
+    try {
+      const existing = this.persistent.getClinic(clinicId);
+      if (!existing) {
+        this.persistent.registerClinic({
+          name: clinic.name,
+          location: clinic.location,
+          country: clinic.country,
+          language: clinic.language as "en",
+          adminPhone: clinic.adminPhone,
+          adminName: clinic.adminName,
+          tier: clinic.tier,
+          channels: clinic.channels,
+          active: true,
+          timezone: "UTC",
+        });
+      }
+    } catch { /* SQLite sync is best-effort */ }
+  }
+
+  /** Register a patient in both local cache and SQLite */
+  setPatient(patientId: string, patient: PatientContact): void {
+    this.patients.set(patientId, patient);
+    // Sync to SQLite so webhooks can see it
+    try {
+      const existing = this.persistent.getPatient(patientId);
+      if (!existing) {
+        this.persistent.registerPatient(patient);
+      }
+    } catch { /* SQLite sync is best-effort */ }
+  }
+
+  /** Store a message in both local cache and SQLite */
+  pushMessage(msg: ConnectMessage): void {
+    this.messages.push(msg);
+    try {
+      this.persistent.storeMessage(msg);
+    } catch { /* SQLite sync is best-effort */ }
   }
 
   getPatientsForClinic(clinicId: string): PatientContact[] {
@@ -308,7 +359,7 @@ function buildAlertMessages(
       maxRetries: config.maxRetries,
     };
     messages.push(msg);
-    store.messages.push(msg);
+    store.pushMessage(msg);
   }
 
   return messages;
@@ -436,7 +487,7 @@ function classifyIncoming(body: string): {
 // ─── Tool Registration ────────────────────────────────────────
 
 export function registerConnectTools(server: McpServer): void {
-  const store = new ConnectStore();
+  const store = new ConnectStore(process.env.MESHCUE_DB_PATH || undefined);
   const auth = new ClinicAuth();
   const rateLimiter = new RateLimiter();
   const auditLogger = new AuditLogger();
@@ -556,7 +607,7 @@ export function registerConnectTools(server: McpServer): void {
           },
         };
 
-        store.clinics.set(clinicId, clinic);
+        store.setClinic(clinicId, clinic);
 
         // Generate API key for the new clinic
         const apiKey = auth.generateApiKey(clinicId);
@@ -660,7 +711,7 @@ export function registerConnectTools(server: McpServer): void {
           retryCount: 0,
           maxRetries: 1,
         };
-        store.messages.push(testMsg);
+        store.pushMessage(testMsg);
 
         return ok({
           success: true,
@@ -975,7 +1026,7 @@ export function registerConnectTools(server: McpServer): void {
           retryCount: 0,
           maxRetries: 1,
         };
-        store.messages.push(testMsg);
+        store.pushMessage(testMsg);
         store.recordActivity(clinicId);
 
         return ok({
@@ -1102,7 +1153,7 @@ export function registerConnectTools(server: McpServer): void {
           retryCount: 0,
           maxRetries: config.maxRetries,
         };
-        store.messages.push(msg);
+        store.pushMessage(msg);
 
         // Update clinic stats
         if (clinicId) {
@@ -1173,7 +1224,7 @@ export function registerConnectTools(server: McpServer): void {
           clinicId,
         };
 
-        store.patients.set(patientId, patient);
+        store.setPatient(patientId, patient);
 
         // Update clinic stats
         clinic.stats.patients++;
@@ -1203,7 +1254,7 @@ export function registerConnectTools(server: McpServer): void {
           retryCount: 0,
           maxRetries: config.maxRetries,
         };
-        store.messages.push(welcomeMsg);
+        store.pushMessage(welcomeMsg);
         clinic.stats.messagesSent++;
 
         return ok({ patientId, clinicId, consentStatus: "pending" });
@@ -1263,7 +1314,7 @@ export function registerConnectTools(server: McpServer): void {
           retryCount: 0,
           maxRetries: 0,
         };
-        store.messages.push(inbound);
+        store.pushMessage(inbound);
 
         if (clinicId) {
           store.recordActivity(clinicId);
