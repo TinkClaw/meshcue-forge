@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshCue Forge — The Hardware Compiler</title>
+  <meta name="description" content="Describe it. Build it. Print it. Open-source MCP server for AI-native hardware design.">
+  <meta property="og:title" content="MeshCue Forge — The Hardware Compiler">
+  <meta property="og:description" content="Turn natural language into complete hardware projects: circuits, firmware, 3D-printable enclosures, and documentation.">
+  <meta property="og:url" content="https://forge.meshcue.com">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #141416;
+      --surface2: #1c1c20;
+      --border: #2a2a2f;
+      --text: #e4e4e7;
+      --text-muted: #8b8b95;
+      --accent: #22d3ee;
+      --accent2: #a78bfa;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .btn-github {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-github:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Hero */
+    .hero {
+      padding: 100px 0 80px;
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(34, 211, 238, 0.1);
+      border: 1px solid rgba(34, 211, 238, 0.2);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 100px;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+    }
+    h1 {
+      font-size: clamp(40px, 6vw, 64px);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      letter-spacing: -1.5px;
+    }
+    h1 .gradient {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #000;
+      padding: 12px 28px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px 28px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: border-color 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--text-muted); }
+
+    /* Install */
+    .install-bar {
+      margin: 48px auto 0;
+      max-width: 420px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .install-bar code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--accent);
+    }
+    .install-bar button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      transition: color 0.2s;
+    }
+    .install-bar button:hover { color: var(--text); }
+
+    /* Pipeline */
+    .pipeline {
+      padding: 80px 0;
+    }
+    .pipeline-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .pipeline-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red { background: var(--red); }
+    .dot-yellow { background: var(--yellow); }
+    .dot-green { background: var(--green); }
+    .pipeline-content {
+      padding: 28px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+    .pipeline-content .comment { color: var(--text-muted); }
+    .pipeline-content .prompt { color: var(--accent); }
+    .pipeline-content .output { color: var(--green); }
+    .pipeline-content .file { color: var(--accent2); }
+    .pipeline-content .dim { color: #555; }
+
+    /* Features */
+    .features {
+      padding: 80px 0;
+    }
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: 36px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 48px;
+      letter-spacing: -0.5px;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
+    .feature-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Tools */
+    .tools {
+      padding: 80px 0;
+    }
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .tool-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+    .tool-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .tool-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Flagship */
+    .flagship {
+      padding: 80px 0;
+    }
+    .flagship-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+    }
+    .flagship-box h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .flagship-box p {
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+    .flagship-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .stat {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .artifacts-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .artifacts-list li {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 8px 12px;
+      background: var(--surface2);
+      border-radius: 6px;
+    }
+    .artifacts-list li span { color: var(--green); }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    footer p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 768px) {
+      .flagship-box {
+        grid-template-columns: 1fr;
+        padding: 28px;
+      }
+      .hero { padding: 60px 0 40px; }
+      .nav-links a:not(.btn-github) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">MeshCue <span>Forge</span></a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#tools">Tools</a>
+        <a href="#flagship">MeshCue Node</a>
+        <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-github">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="container">
+      <div class="badge">OPEN SOURCE MCP SERVER</div>
+      <h1>The <span class="gradient">hardware compiler</span></h1>
+      <p class="subtitle">
+        Describe it. Build it. Print it.<br>
+        Turn natural language into complete hardware projects — circuits, firmware, 3D-printable enclosures, and docs.
+      </p>
+      <div class="hero-actions">
+        <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-primary">Get Started</a>
+        <a href="#flagship" class="btn-secondary">See the MeshCue Node</a>
+      </div>
+      <div class="install-bar">
+        <code>npm install @meshcue/forge</code>
+        <button onclick="navigator.clipboard.writeText('npm install @meshcue/forge')">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pipeline">
+    <div class="container">
+      <div class="pipeline-box">
+        <div class="pipeline-header">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="pipeline-content">
+          <span class="comment"># Describe what you want to build</span><br>
+          <span class="prompt">&gt;</span> "ESP32-S3 board with OLED, 3 LEDs, 2 buttons, buzzer"<br>
+          <br>
+          <span class="comment"># MeshCue Forge generates everything</span><br>
+          <span class="output">&#10003;</span> <span class="file">diagram.json</span> <span class="dim">— Wokwi circuit (simulate in browser)</span><br>
+          <span class="output">&#10003;</span> <span class="file">main.ino</span> <span class="dim">— Arduino firmware (ready to compile)</span><br>
+          <span class="output">&#10003;</span> <span class="file">enclosure.scad</span> <span class="dim">— 3D printable snap-fit case</span><br>
+          <span class="output">&#10003;</span> <span class="file">platformio.ini</span> <span class="dim">— Build config</span><br>
+          <span class="output">&#10003;</span> <span class="file">bom.csv</span> <span class="dim">— Bill of materials</span><br>
+          <span class="output">&#10003;</span> <span class="file">PINOUT.md</span> <span class="dim">— GPIO reference</span><br>
+          <span class="output">&#10003;</span> <span class="file">ASSEMBLY.md</span> <span class="dim">— Step-by-step build guide</span><br>
+          <span class="output">&#10003;</span> <span class="file">PRINT_GUIDE.md</span> <span class="dim">— 3D print settings</span><br>
+          <br>
+          <span class="comment"># Build time: 1ms</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-label">Features</div>
+      <div class="section-title">From description to device</div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(34,211,238,0.1); color: var(--accent);">&#9889;</div>
+          <h3>MHDL Standard</h3>
+          <p>One YAML/JSON file describes your entire hardware project. Git-friendly diffs, team-friendly workflows, AI-friendly structure.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(74,222,128,0.1); color: var(--green);">&#10004;</div>
+          <h3>Design Rule Checks</h3>
+          <p>Pin conflicts, I2C collisions, power budget, connection integrity, enclosure fit, mounting alignment — validated on every build.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(167,139,250,0.1); color: var(--accent2);">&#9881;</div>
+          <h3>Pluggable Backends</h3>
+          <p>Wokwi, Arduino, OpenSCAD, KiCad by default. Swap in MicroPython, CadQuery, FreeCAD, or EasyEDA. Your choice.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(250,204,21,0.1); color: var(--yellow);">&#9675;</div>
+          <h3>3D Print Ready</h3>
+          <p>Auto-generated parametric enclosures with snap-fit clips, screw mounts, cutouts for USB/LEDs/buttons, ventilation, and embossed labels.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(248,113,113,0.1); color: var(--red);">&#9879;</div>
+          <h3>MCP Native</h3>
+          <p>Works with Claude, GPT, Gemini, and any MCP-compatible AI client. Hardware design as a conversation.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background: rgba(34,211,238,0.1); color: var(--accent);">&#10697;</div>
+          <h3>Full Pipeline</h3>
+          <p>Circuit simulation, firmware generation, PCB export, enclosure design, BOM sourcing, and documentation — one command.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tools" id="tools">
+    <div class="container">
+      <div class="section-label">MCP Tools</div>
+      <div class="section-title">Four tools, infinite hardware</div>
+      <div class="tools-grid">
+        <div class="tool-card">
+          <div class="tool-name">meshforge-describe</div>
+          <div class="tool-desc">Natural language to MHDL spec. Describe your board, get a buildable hardware definition.</div>
+        </div>
+        <div class="tool-card">
+          <div class="tool-name">meshforge-build</div>
+          <div class="tool-desc">MHDL to all artifacts. Circuit, firmware, enclosure, BOM, and docs in one call.</div>
+        </div>
+        <div class="tool-card">
+          <div class="tool-name">meshforge-validate</div>
+          <div class="tool-desc">6 Design Rule Checks. Nothing ships without passing validation.</div>
+        </div>
+        <div class="tool-card">
+          <div class="tool-name">meshforge-iterate</div>
+          <div class="tool-desc">Patch and rebuild. Change the enclosure, swap the MCU, add components — instant rebuild.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="flagship" id="flagship">
+    <div class="container">
+      <div class="section-label">Flagship Project</div>
+      <div class="section-title">MeshCue Node</div>
+      <div class="flagship-box">
+        <div>
+          <h2>Built entirely with Forge</h2>
+          <p>
+            A dedicated mesh networking node — always-on, 3D printed, running on ESP32-S3.
+            Relays signals, participates in consensus, displays live mesh status.
+            Every artifact was generated from a single MHDL spec.
+          </p>
+          <div class="flagship-stats">
+            <div class="stat">
+              <div class="stat-value">8</div>
+              <div class="stat-label">Components</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">1ms</div>
+              <div class="stat-label">Build time</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">8</div>
+              <div class="stat-label">Artifacts</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">450mA</div>
+              <div class="stat-label">Power draw</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <ul class="artifacts-list">
+            <li><span>&#10003;</span> meshcue-node.mhdl.json</li>
+            <li><span>&#10003;</span> diagram.json — Wokwi circuit</li>
+            <li><span>&#10003;</span> main.ino — Arduino firmware</li>
+            <li><span>&#10003;</span> enclosure.scad — 3D printable case</li>
+            <li><span>&#10003;</span> platformio.ini — build config</li>
+            <li><span>&#10003;</span> bom.csv — bill of materials</li>
+            <li><span>&#10003;</span> PINOUT.md — GPIO reference</li>
+            <li><span>&#10003;</span> ASSEMBLY.md — build instructions</li>
+            <li><span>&#10003;</span> PRINT_GUIDE.md — print settings</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>
+        MIT Licensed &middot;
+        Built by <a href="https://tinkclaw.com">TinkClaw</a> &middot;
+        <a href="https://github.com/TinkClaw/meshcue-forge">GitHub</a> &middot;
+        <a href="https://meshcue.com">meshcue.com</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>
