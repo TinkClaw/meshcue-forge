@@ -12,6 +12,7 @@ import type {
   MHDLDocument,
   BuildArtifact,
   BuildResult,
+  BuildStageType,
   ForgeConfig,
   EnclosureBackend,
   PCBBackend,
@@ -32,6 +33,7 @@ import { generateLlamaMeshEnclosure } from "../backends/enclosure/llama-mesh.js"
 
 // PCB backends
 import { generateSKiDLScript } from "../backends/pcb/skidl.js";
+import { generateKiCadPCB } from "../backends/pcb/kicad.js";
 
 // Visualization backends
 import { generateHunyuan3DModel } from "../backends/visualization/hunyuan3d.js";
@@ -242,16 +244,11 @@ function selectPCBBackend(
 function selectVizBackend(
   doc: MHDLDocument,
   config: ForgeConfig,
-  registry: BackendRegistry,
+  _registry: BackendRegistry,
 ): VisualizationBackend {
-  const preferred = doc.visualization?.backend || config.defaultVisualizationBackend || "hunyuan3d";
-  if (registry.visualization[preferred]?.available) return preferred;
-
-  // Fallback chain
-  for (const b of ["hunyuan3d", "llama-mesh", "cosmos"] as VisualizationBackend[]) {
-    if (registry.visualization[b].available) return b;
-  }
-  return "hunyuan3d"; // will generate prompt even if endpoint isn't set
+  // All visualization backends are always available (they produce offline
+  // placeholders when endpoints aren't configured), so just use the preferred one.
+  return doc.visualization?.backend || config.defaultVisualizationBackend || "hunyuan3d";
 }
 
 // ─── Enclosure Dispatch ─────────────────────────────────────
@@ -276,11 +273,14 @@ async function buildEnclosure(
 
 // ─── PCB Dispatch ───────────────────────────────────────────
 
-function buildPCB(doc: MHDLDocument, backend: PCBBackend): BuildArtifact[] {
+async function buildPCB(
+  doc: MHDLDocument,
+  backend: PCBBackend,
+  config: ForgeConfig,
+): Promise<BuildArtifact[]> {
   switch (backend) {
     case "kicad":
-      // KiCad IPC requires local install — fall through to SKiDL netlist
-      return generateSKiDLScript(doc);
+      return generateKiCadPCB(doc, config);
     case "skidl":
     default:
       return generateSKiDLScript(doc);
@@ -305,22 +305,39 @@ async function buildVisualization(
   }
 }
 
+// ─── Progress Callback ──────────────────────────────────────
+
+export interface BuildProgress {
+  stage: BuildStageType | "validate";
+  status: "starting" | "done" | "error";
+  backend?: string;
+  durationMs?: number;
+  error?: string;
+}
+
+export type ProgressCallback = (progress: BuildProgress) => void;
+
 // ─── Main Build Function ─────────────────────────────────────
 
 export async function build(
   doc: MHDLDocument,
   stages: BuildStage[] = ["all"],
   configOverride?: ForgeConfig,
+  onProgress?: ProgressCallback,
 ): Promise<BuildResult> {
   const startTime = Date.now();
   const artifacts: BuildArtifact[] = [];
+  const emit = onProgress ?? (() => {});
 
   // Load config and detect capabilities
   const config = configOverride ?? loadConfig();
   const registry = detectCapabilities(config);
 
   // Always validate first
+  emit({ stage: "validate", status: "starting" });
+  const vStart = Date.now();
   const validation = validate(doc);
+  emit({ stage: "validate", status: "done", durationMs: Date.now() - vStart });
 
   if (!validation.valid) {
     return {
@@ -335,45 +352,78 @@ export async function build(
 
   // Circuit (Wokwi — always available)
   if (buildAll || stages.includes("circuit")) {
+    emit({ stage: "circuit", status: "starting", backend: "wokwi" });
+    const t = Date.now();
     artifacts.push(generateWokwiCircuit(doc));
+    emit({ stage: "circuit", status: "done", backend: "wokwi", durationMs: Date.now() - t });
   }
 
   // Firmware (Arduino — always available)
   if (buildAll || stages.includes("firmware")) {
+    emit({ stage: "firmware", status: "starting", backend: "arduino" });
+    const t = Date.now();
     artifacts.push(...generateArduinoFirmware(doc));
+    emit({ stage: "firmware", status: "done", backend: "arduino", durationMs: Date.now() - t });
   }
 
   // Enclosure (multi-backend)
   if (buildAll || stages.includes("enclosure")) {
     const backend = selectEnclosureBackend(doc, config, registry);
-    artifacts.push(...await buildEnclosure(doc, backend, config));
+    emit({ stage: "enclosure", status: "starting", backend });
+    const t = Date.now();
+    try {
+      artifacts.push(...await buildEnclosure(doc, backend, config));
+      emit({ stage: "enclosure", status: "done", backend, durationMs: Date.now() - t });
+    } catch (err) {
+      emit({ stage: "enclosure", status: "error", backend, error: String(err) });
+    }
   }
 
   // PCB (multi-backend)
   if (buildAll || stages.includes("pcb")) {
     const backend = selectPCBBackend(doc, config, registry);
-    artifacts.push(...buildPCB(doc, backend));
+    emit({ stage: "pcb", status: "starting", backend });
+    const t = Date.now();
+    try {
+      artifacts.push(...await buildPCB(doc, backend, config));
+      emit({ stage: "pcb", status: "done", backend, durationMs: Date.now() - t });
+    } catch (err) {
+      emit({ stage: "pcb", status: "error", backend, error: String(err) });
+    }
   }
 
-  // Visualization (multi-backend — only if requested or config'd)
+  // Visualization (multi-backend)
   if (
     stages.includes("visualization") ||
     (buildAll && (doc.visualization?.generate3DModel || doc.visualization?.generateVideo))
   ) {
     const backend = selectVizBackend(doc, config, registry);
-    artifacts.push(...await buildVisualization(doc, backend, config));
+    emit({ stage: "visualization", status: "starting", backend });
+    const t = Date.now();
+    try {
+      artifacts.push(...await buildVisualization(doc, backend, config));
+      emit({ stage: "visualization", status: "done", backend, durationMs: Date.now() - t });
+    } catch (err) {
+      emit({ stage: "visualization", status: "error", backend, error: String(err) });
+    }
   }
 
   // BOM
   if (buildAll || stages.includes("bom")) {
+    emit({ stage: "bom", status: "starting" });
+    const t = Date.now();
     artifacts.push(generateBOM(doc));
+    emit({ stage: "bom", status: "done", durationMs: Date.now() - t });
   }
 
   // Docs
   if (buildAll || stages.includes("docs")) {
+    emit({ stage: "docs", status: "starting" });
+    const t = Date.now();
     if (doc.docs?.generatePinout) artifacts.push(generatePinoutDoc(doc));
     if (doc.docs?.generateAssembly) artifacts.push(generateAssemblyDoc(doc));
     if (doc.docs?.generatePrintGuide) artifacts.push(generatePrintGuide(doc));
+    emit({ stage: "docs", status: "done", durationMs: Date.now() - t });
   }
 
   return {

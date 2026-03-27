@@ -17,7 +17,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { describe } from "./tools/describe.js";
-import { build, type BuildStage } from "./tools/build.js";
+import { build, type BuildStage, type BuildProgress } from "./tools/build.js";
 import { validate } from "./schema/validate.js";
 import { loadConfig, detectCapabilities } from "./config.js";
 import type { MHDLDocument } from "./schema/mhdl.js";
@@ -104,7 +104,18 @@ server.tool(
   async ({ mhdl, stages }) => {
     try {
       const doc: MHDLDocument = JSON.parse(mhdl);
-      const result = await build(doc, stages as BuildStage[]);
+
+      // Collect progress events during build
+      const progressLog: BuildProgress[] = [];
+      const onProgress = (p: BuildProgress) => {
+        progressLog.push(p);
+        // Stream progress to stderr so MCP clients can display it
+        console.error(
+          `[forge] ${p.status === "starting" ? "▶" : p.status === "done" ? "✓" : "✗"} ${p.stage}${p.backend ? ` (${p.backend})` : ""}${p.durationMs !== undefined ? ` ${p.durationMs}ms` : ""}${p.error ? ` — ${p.error}` : ""}`
+        );
+      };
+
+      const result = await build(doc, stages as BuildStage[], undefined, onProgress);
 
       if (!result.success) {
         return {
@@ -133,6 +144,7 @@ server.tool(
       const output: Record<string, unknown> = {
         success: true,
         buildTime: `${result.buildTime}ms`,
+        progress: progressLog,
         stats: result.validation.stats,
         warnings: result.validation.issues.filter(
           (i) => i.severity === "warning"
@@ -142,6 +154,7 @@ server.tool(
           filename: a.filename,
           format: a.format,
           size: `${a.content.length} bytes`,
+          backend: a.backend,
         })),
       };
 

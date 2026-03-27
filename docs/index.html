@@ -630,9 +630,27 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 // ── Three.js 3D Viewer ──────────────────────
-let threeScene, threeCamera, threeRenderer, threeControls, enclosureMesh;
+let threeScene, threeCamera, threeRenderer, threeControls, enclosureGroup;
+
+const CASE_MAT = new THREE.MeshPhysicalMaterial({
+  color: 0x8B5CF6, transparent: true, opacity: 0.25,
+  roughness: 0.2, metalness: 0.15, side: THREE.DoubleSide,
+  clearcoat: 0.3, clearcoatRoughness: 0.2,
+});
+const LID_MAT = new THREE.MeshPhysicalMaterial({
+  color: 0xD946EF, transparent: true, opacity: 0.2,
+  roughness: 0.2, metalness: 0.15, side: THREE.DoubleSide,
+  clearcoat: 0.3, clearcoatRoughness: 0.2,
+});
+const EDGE_MAT = new THREE.LineBasicMaterial({ color: 0x8B5CF6, transparent: true, opacity: 0.6 });
+const CUTOUT_MAT = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.5 });
+const MOUNT_MAT = new THREE.MeshPhysicalMaterial({ color: 0xF59E0B, roughness: 0.4, metalness: 0.3 });
+const BOARD_MAT = new THREE.MeshPhysicalMaterial({ color: 0x166534, roughness: 0.6, metalness: 0.1 });
 
 function init3DViewer() {
   const canvas = document.getElementById('enclosure3DCanvas');
@@ -640,32 +658,40 @@ function init3DViewer() {
 
   threeScene = new THREE.Scene();
   threeCamera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
-  threeCamera.position.set(80, 60, 100);
+  threeCamera.position.set(90, 70, 110);
 
   threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   threeRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
-  threeRenderer.setPixelRatio(window.devicePixelRatio);
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   threeRenderer.setClearColor(0x000000, 0);
+  threeRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  threeRenderer.toneMappingExposure = 1.2;
 
-  // Lighting
-  threeScene.add(new THREE.AmbientLight(0x8B5CF6, 0.4));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(50, 80, 60);
-  threeScene.add(dirLight);
-  const rimLight = new THREE.DirectionalLight(0xD946EF, 0.3);
-  rimLight.position.set(-40, 20, -50);
-  threeScene.add(rimLight);
+  // Lighting — 3-point studio setup
+  threeScene.add(new THREE.AmbientLight(0x8B5CF6, 0.3));
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
+  key.position.set(60, 100, 80);
+  key.castShadow = true;
+  threeScene.add(key);
+  const fill = new THREE.DirectionalLight(0xD946EF, 0.35);
+  fill.position.set(-50, 40, -60);
+  threeScene.add(fill);
+  const rim = new THREE.PointLight(0x22d3ee, 0.5, 200);
+  rim.position.set(0, -20, -80);
+  threeScene.add(rim);
 
   // Grid
-  const grid = new THREE.GridHelper(120, 20, 0x334155, 0x1e293b);
+  const grid = new THREE.GridHelper(140, 28, 0x334155, 0x1e293b);
   grid.position.y = -1;
   threeScene.add(grid);
 
   // Controls
   threeControls = new OrbitControls(threeCamera, threeRenderer.domElement);
   threeControls.enableDamping = true;
+  threeControls.dampingFactor = 0.08;
   threeControls.autoRotate = true;
-  threeControls.autoRotateSpeed = 1.5;
+  threeControls.autoRotateSpeed = 1.2;
+  threeControls.maxPolarAngle = Math.PI * 0.85;
 
   function animate() {
     requestAnimationFrame(animate);
@@ -674,7 +700,6 @@ function init3DViewer() {
   }
   animate();
 
-  // Resize
   new ResizeObserver(() => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     threeCamera.aspect = w / h;
@@ -683,79 +708,260 @@ function init3DViewer() {
   }).observe(canvas);
 }
 
-function updateEnclosureMesh(doc) {
-  if (!threeScene) init3DViewer();
-  if (!threeScene) return;
+// ── Cutout Size LUT ──────────────────────────
+const CUTOUT_LUT = {
+  'usb-c': [9.5, 3.5], 'usb-micro': [8, 3], 'usb-a': [13, 6], 'dc-jack': [9, 11],
+  'led-hole': [5, 5], 'button-cap': [7, 7], 'oled-window': [27, 15], 'lcd-window': [72, 25],
+  'antenna-slot': [12, 3], 'vent': [20, 10], 'sd-card': [12, 2.5], 'audio-jack': [6, 6],
+  'speaker-grille': [15, 15], 'mic-hole': [3, 3],
+};
 
-  // Remove old mesh
-  if (enclosureMesh) { threeScene.remove(enclosureMesh); enclosureMesh.geometry?.dispose(); }
-
+// ── Parametric Enclosure Builder ─────────────
+function buildParametricEnclosure(doc) {
+  const group = new THREE.Group();
   const dims = doc.board.dimensions || { widthMm: 60, heightMm: 40, depthMm: 20 };
   const wall = doc.enclosure.wallThicknessMm;
-  const w = dims.widthMm + wall * 2, h = dims.heightMm + wall * 2, d = (dims.depthMm || 20) + wall * 2;
+  const w = dims.widthMm + wall * 2;
+  const h = dims.heightMm + wall * 2;
+  const d = (dims.depthMm || 20) + wall * 2;
   const r = Math.min(doc.enclosure.cornerRadiusMm, w / 4, h / 4, d / 4);
-
-  // Rounded box via Three.js RoundedBoxGeometry approach (approximate with box + edges)
-  const group = new THREE.Group();
-
-  // Base shell (translucent)
-  const baseMat = new THREE.MeshPhysicalMaterial({
-    color: 0x8B5CF6, transparent: true, opacity: 0.18,
-    roughness: 0.3, metalness: 0.1, side: THREE.DoubleSide,
-  });
   const splitZ = d * 0.7;
-  const baseGeo = new THREE.BoxGeometry(w, splitZ, h);
-  const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+
+  // ── Outer shell with rounded edges ──
+  const outerGeo = new RoundedBoxGeometry(w, splitZ, h, 4, r);
+  const baseMesh = new THREE.Mesh(outerGeo, CASE_MAT.clone());
   baseMesh.position.y = splitZ / 2;
   group.add(baseMesh);
 
-  // Lid (slightly different color)
-  const lidMat = new THREE.MeshPhysicalMaterial({
-    color: 0xD946EF, transparent: true, opacity: 0.15,
-    roughness: 0.3, metalness: 0.1, side: THREE.DoubleSide,
-  });
+  // ── Inner cavity (slightly smaller, darker) ──
+  const innerW = w - wall * 2, innerH = h - wall * 2, innerD = splitZ - wall * 2;
+  if (innerW > 0 && innerH > 0 && innerD > 0) {
+    const innerGeo = new RoundedBoxGeometry(innerW, innerD, innerH, 4, Math.max(r - wall, 0.5));
+    const innerMat = new THREE.MeshPhysicalMaterial({
+      color: 0x1e1b4b, transparent: true, opacity: 0.15, side: THREE.BackSide,
+    });
+    const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+    innerMesh.position.y = wall + innerD / 2;
+    group.add(innerMesh);
+  }
+
+  // ── Lid ──
   const lidH = d - splitZ;
-  const lidGeo = new THREE.BoxGeometry(w, lidH, h);
-  const lidMesh = new THREE.Mesh(lidGeo, lidMat);
+  const lidGeo = new RoundedBoxGeometry(w, lidH, h, 4, r);
+  const lidMesh = new THREE.Mesh(lidGeo, LID_MAT.clone());
   lidMesh.position.y = splitZ + lidH / 2;
   group.add(lidMesh);
 
-  // Wireframe edges
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x8B5CF6, transparent: true, opacity: 0.5 });
-  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), edgeMat).translateY(splitZ / 2));
-  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(lidGeo), edgeMat).translateY(splitZ + lidH / 2));
+  // ── Wireframe edges ──
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(outerGeo), EDGE_MAT).translateY(splitZ / 2));
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(lidGeo), EDGE_MAT).translateY(splitZ + lidH / 2));
 
-  // Cutout indicators
-  const cutoutMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.4 });
-  for (const cutout of doc.enclosure.cutouts) {
-    const cw = cutout.type === 'oled-window' ? 27 : cutout.type === 'usb-c' ? 9.5 : cutout.type === 'led-hole' ? 5 : 8;
-    const ch = cutout.type === 'oled-window' ? 15 : cutout.type === 'usb-c' ? 3.5 : cutout.type === 'led-hole' ? 5 : 5;
-    const cGeo = new THREE.BoxGeometry(cw, ch, wall + 1);
-    const cMesh = new THREE.Mesh(cGeo, cutoutMat);
-    if (cutout.wall === 'front') { cMesh.position.set(0, d / 2, -h / 2); }
-    else if (cutout.wall === 'back') { cMesh.position.set(0, d / 2, h / 2); }
-    else if (cutout.wall === 'left') { cMesh.position.set(-w / 2, d / 2, 0); cMesh.rotation.y = Math.PI / 2; }
-    else if (cutout.wall === 'right') { cMesh.position.set(w / 2, d / 2, 0); cMesh.rotation.y = Math.PI / 2; }
-    group.add(cMesh);
+  // ── PCB board inside ──
+  const boardW = dims.widthMm, boardH = dims.heightMm;
+  const boardGeo = new THREE.BoxGeometry(boardW, 1.6, boardH);
+  const boardMesh = new THREE.Mesh(boardGeo, BOARD_MAT);
+  boardMesh.position.y = wall + 5 + 0.8;
+  group.add(boardMesh);
+
+  // ── Mounting posts ──
+  if (doc.board.mountingHoles) {
+    const postR = doc.board.mountingHoles.diameterMm / 2 + 1.5;
+    const postH = 5;
+    for (const pos of doc.board.mountingHoles.positions) {
+      const postGeo = new THREE.CylinderGeometry(postR, postR, postH, 16);
+      const post = new THREE.Mesh(postGeo, MOUNT_MAT);
+      post.position.set(pos.x - boardW / 2 + wall, wall + postH / 2, pos.y - boardH / 2 + wall);
+      group.add(post);
+      // Screw hole
+      const holeGeo = new THREE.CylinderGeometry(doc.board.mountingHoles.diameterMm / 2, doc.board.mountingHoles.diameterMm / 2, postH + 0.2, 12);
+      const holeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+      const hole = new THREE.Mesh(holeGeo, holeMat);
+      hole.position.copy(post.position);
+      group.add(hole);
+    }
   }
 
-  // LED indicators
-  const leds = doc.board.components.filter(c => c.type === 'led');
+  // ── Cutouts ──
+  for (const cutout of doc.enclosure.cutouts) {
+    const sz = CUTOUT_LUT[cutout.type] || [10, 5];
+    const cw = cutout.diameter || sz[0], ch = cutout.diameter || sz[1];
+    const isCircular = cutout.type === 'led-hole' || cutout.type === 'mic-hole';
+
+    let geo;
+    if (isCircular && cutout.diameter) {
+      geo = new THREE.CylinderGeometry(cutout.diameter / 2, cutout.diameter / 2, wall + 2, 16);
+    } else if (cutout.type === 'speaker-grille') {
+      // Array of small holes
+      const grilleGroup = new THREE.Group();
+      const holeR = 0.75, spacing = 3;
+      const nx = Math.floor(cw / spacing), ny = Math.floor(ch / spacing);
+      for (let gx = 0; gx < nx; gx++) {
+        for (let gy = 0; gy < ny; gy++) {
+          const dx = (gx - nx / 2 + 0.5) * spacing, dy = (gy - ny / 2 + 0.5) * spacing;
+          if (Math.sqrt(dx * dx + dy * dy) <= cw / 2) {
+            const hGeo = new THREE.CylinderGeometry(holeR, holeR, wall + 2, 8);
+            const hMesh = new THREE.Mesh(hGeo, CUTOUT_MAT);
+            hMesh.position.set(dx, 0, dy);
+            grilleGroup.add(hMesh);
+          }
+        }
+      }
+      // Position grille on wall
+      if (cutout.wall === 'front') { grilleGroup.position.set(0, d / 2, -h / 2); grilleGroup.rotation.x = Math.PI / 2; }
+      else if (cutout.wall === 'back') { grilleGroup.position.set(0, d / 2, h / 2); grilleGroup.rotation.x = Math.PI / 2; }
+      else if (cutout.wall === 'left') { grilleGroup.position.set(-w / 2, d / 2, 0); grilleGroup.rotation.z = Math.PI / 2; }
+      else if (cutout.wall === 'right') { grilleGroup.position.set(w / 2, d / 2, 0); grilleGroup.rotation.z = Math.PI / 2; }
+      group.add(grilleGroup);
+      continue;
+    } else {
+      geo = new THREE.BoxGeometry(cw, wall + 2, ch);
+    }
+
+    const mesh = new THREE.Mesh(geo, CUTOUT_MAT);
+    if (cutout.wall === 'front') { mesh.position.set(0, d / 2, -h / 2); if (isCircular) mesh.rotation.x = Math.PI / 2; }
+    else if (cutout.wall === 'back') { mesh.position.set(0, d / 2, h / 2); if (isCircular) mesh.rotation.x = Math.PI / 2; }
+    else if (cutout.wall === 'left') { mesh.position.set(-w / 2, d / 2, 0); mesh.rotation.y = Math.PI / 2; if (isCircular) mesh.rotation.set(0, 0, Math.PI / 2); }
+    else if (cutout.wall === 'right') { mesh.position.set(w / 2, d / 2, 0); mesh.rotation.y = Math.PI / 2; if (isCircular) mesh.rotation.set(0, 0, Math.PI / 2); }
+    else if (cutout.wall === 'top') { mesh.position.set(0, d, 0); mesh.rotation.set(0, 0, 0); }
+    else if (cutout.wall === 'bottom') { mesh.position.set(0, 0, 0); mesh.rotation.set(0, 0, 0); }
+    group.add(mesh);
+  }
+
+  // ── LED indicators (glowing spheres with point lights) ──
+  const leds = doc.board.components.filter(c => c.type === 'led' || c.type === 'neopixel');
   const ledColorMap = { green: 0x4ade80, red: 0xf87171, blue: 0x60a5fa, yellow: 0xfacc15, white: 0xe2e8f0, orange: 0xfb923c };
   leds.forEach((led, i) => {
     const col = ledColorMap[led.properties?.color] || 0x4ade80;
-    const ledGeo = new THREE.SphereGeometry(2, 16, 16);
+    const ledGeo = new THREE.SphereGeometry(2.5, 20, 20);
     const ledMat = new THREE.MeshBasicMaterial({ color: col });
     const ledMesh = new THREE.Mesh(ledGeo, ledMat);
-    ledMesh.position.set(-w / 3 + i * 8, d * 0.7, -h / 2 - 0.5);
+    const x = -w / 3 + i * 9;
+    ledMesh.position.set(x, d * 0.7, -h / 2 - 1);
     group.add(ledMesh);
+    // Glow light
+    const glow = new THREE.PointLight(col, 0.6, 25);
+    glow.position.copy(ledMesh.position);
+    group.add(glow);
   });
 
-  enclosureMesh = group;
+  // ── OLED / LCD screen ──
+  const displays = doc.board.components.filter(c => c.type === 'oled' || c.type === 'lcd');
+  displays.forEach((disp) => {
+    const isLCD = disp.type === 'lcd';
+    const sw = isLCD ? 68 : 24, sh = isLCD ? 22 : 12;
+    const screenGeo = new THREE.PlaneGeometry(sw, sh);
+    const screenMat = new THREE.MeshBasicMaterial({ color: isLCD ? 0x1a4d2e : 0x000814 });
+    const screen = new THREE.Mesh(screenGeo, screenMat);
+    screen.position.set(0, d / 2, -h / 2 - 0.5);
+    group.add(screen);
+    // Screen content glow
+    const contentGeo = new THREE.PlaneGeometry(sw - 4, sh - 3);
+    const contentMat = new THREE.MeshBasicMaterial({ color: isLCD ? 0x4ade80 : 0x60a5fa, transparent: true, opacity: 0.7 });
+    const content = new THREE.Mesh(contentGeo, contentMat);
+    content.position.set(0, d / 2, -h / 2 - 0.6);
+    group.add(content);
+  });
+
+  // ── Label emboss ──
+  if (doc.enclosure.labelEmboss) {
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 256; labelCanvas.height = 64;
+    const ctx = labelCanvas.getContext('2d');
+    ctx.fillStyle = 'transparent';
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.font = 'bold 28px Outfit, sans-serif';
+    ctx.fillStyle = 'rgba(139,92,246,0.5)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(doc.enclosure.labelEmboss.substring(0, 16), 128, 32);
+    const labelTex = new THREE.CanvasTexture(labelCanvas);
+    const labelGeo = new THREE.PlaneGeometry(w * 0.6, 8);
+    const labelMat = new THREE.MeshBasicMaterial({ map: labelTex, transparent: true });
+    const labelMesh = new THREE.Mesh(labelGeo, labelMat);
+    labelMesh.position.set(0, splitZ * 0.4, -h / 2 - 0.3);
+    group.add(labelMesh);
+  }
+
+  return group;
+}
+
+// ── STL / OBJ File Loaders ───────────────────
+const stlLoader = new STLLoader();
+const objLoader = new OBJLoader();
+
+function loadSTLFromText(stlText) {
+  if (!threeScene) init3DViewer();
+  clearEnclosure();
+  const group = new THREE.Group();
+  const geometry = stlLoader.parse(new TextEncoder().encode(stlText).buffer);
+  geometry.computeVertexNormals();
+  const mesh = new THREE.Mesh(geometry, CASE_MAT.clone());
+  // Center the geometry
+  geometry.computeBoundingBox();
+  const center = new THREE.Vector3();
+  geometry.boundingBox.getCenter(center);
+  mesh.position.sub(center);
+  group.add(mesh);
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), EDGE_MAT));
+  enclosureGroup = group;
+  threeScene.add(group);
+  fitCameraToObject(group);
+}
+
+function loadOBJFromText(objText) {
+  if (!threeScene) init3DViewer();
+  clearEnclosure();
+  const object = objLoader.parse(objText);
+  object.traverse(child => {
+    if (child.isMesh) {
+      child.material = CASE_MAT.clone();
+      child.geometry.computeVertexNormals();
+    }
+  });
+  enclosureGroup = object;
+  threeScene.add(object);
+  fitCameraToObject(object);
+}
+
+function clearEnclosure() {
+  if (enclosureGroup) {
+    threeScene.remove(enclosureGroup);
+    enclosureGroup.traverse(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    });
+    enclosureGroup = null;
+  }
+}
+
+function fitCameraToObject(object) {
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  const dist = maxDim * 2;
+  threeCamera.position.set(dist * 0.7, dist * 0.5, dist * 0.8);
+  threeControls.target.copy(box.getCenter(new THREE.Vector3()));
+  threeControls.update();
+}
+
+// ── Main API ─────────────────────────────────
+function updateEnclosureMesh(doc) {
+  if (!threeScene) init3DViewer();
+  if (!threeScene) return;
+  clearEnclosure();
+  const group = buildParametricEnclosure(doc);
+  enclosureGroup = group;
   threeScene.add(group);
 }
+
+// Expose to global scope for non-module scripts
 window.updateEnclosureMesh = updateEnclosureMesh;
 window.init3DViewer = init3DViewer;
+window.loadSTLFromText = loadSTLFromText;
+window.loadOBJFromText = loadOBJFromText;
 </script>
 
 <script>

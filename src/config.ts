@@ -36,6 +36,7 @@ export function loadConfig(): ForgeConfig {
 export interface BackendCapability {
   name: string;
   available: boolean;
+  online: boolean;
   reason?: string;
 }
 
@@ -48,20 +49,23 @@ export interface BackendRegistry {
 export function detectCapabilities(config: ForgeConfig): BackendRegistry {
   return {
     enclosure: {
-      openscad: { name: "OpenSCAD", available: true },
+      openscad: { name: "OpenSCAD", available: true, online: true },
       cadquery: {
         name: "CadQuery",
         available: true, // Script generation always works; execution requires Python
+        online: !!config.pythonPath,
         reason: config.pythonPath ? undefined : "Python not configured",
       },
       "zoo-cad": {
         name: "Zoo Text-to-CAD",
         available: !!config.zooCadApiKey,
+        online: !!config.zooCadApiKey,
         reason: config.zooCadApiKey ? undefined : "ZOO_CAD_API_KEY not set",
       },
       "llama-mesh": {
         name: "LLaMA-Mesh",
         available: !!config.llamaMeshEndpoint,
+        online: !!config.llamaMeshEndpoint,
         reason: config.llamaMeshEndpoint ? undefined : "LLAMA_MESH_ENDPOINT not set",
       },
     },
@@ -69,28 +73,33 @@ export function detectCapabilities(config: ForgeConfig): BackendRegistry {
       skidl: {
         name: "SKiDL",
         available: true, // Script generation always works
+        online: true,
       },
       kicad: {
         name: "KiCad 9",
         available: !!config.kicadPath,
+        online: !!config.kicadPath,
         reason: config.kicadPath ? undefined : "KICAD_PATH not set",
       },
     },
     visualization: {
       hunyuan3d: {
         name: "Hunyuan3D 2.1",
-        available: !!config.hunyuan3dEndpoint,
-        reason: config.hunyuan3dEndpoint ? undefined : "HUNYUAN3D_ENDPOINT not set",
+        available: true,
+        online: !!config.hunyuan3dEndpoint,
+        reason: config.hunyuan3dEndpoint ? undefined : "offline mode — generates placeholder",
       },
       "llama-mesh": {
         name: "LLaMA-Mesh 3D",
-        available: !!config.llamaMeshEndpoint,
-        reason: config.llamaMeshEndpoint ? undefined : "LLAMA_MESH_ENDPOINT not set",
+        available: true,
+        online: !!config.llamaMeshEndpoint,
+        reason: config.llamaMeshEndpoint ? undefined : "offline mode — generates placeholder",
       },
       cosmos: {
         name: "Cosmos Transfer 2.5",
-        available: !!config.cosmosEndpoint,
-        reason: config.cosmosEndpoint ? undefined : "COSMOS_ENDPOINT not set",
+        available: true,
+        online: !!config.cosmosEndpoint,
+        reason: config.cosmosEndpoint ? undefined : "offline mode — generates placeholder",
       },
     },
   };
