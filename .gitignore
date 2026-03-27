@@ -3,3 +3,7 @@ dist/
 .meshforge/
 *.stl
 .DS_Store
+.env
+.env.*
+*.pem
+*.key
