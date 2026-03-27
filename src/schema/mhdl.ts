@@ -45,6 +45,11 @@ export type ComponentType =
   | "temperature_sensor"
   | "thermocouple"
   | "joystick"
+  | "pulse_oximeter"
+  | "ecg"
+  | "blood_pressure"
+  | "load_cell"
+  | "color_sensor"
   | "custom";
 
 export type MCUFamily =
@@ -314,6 +319,7 @@ export interface DocsConfig {
   generatePrintGuide: boolean;
   generateMedicalDocs?: boolean;
   readme?: boolean;
+  language?: "en" | "fr" | "pt" | "es" | "sw" | "ar" | "bn" | "hi" | "zh";
 }
 
 // ─── Metadata ────────────────────────────────────────────────

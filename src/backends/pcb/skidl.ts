@@ -126,6 +126,15 @@ export function generateSKiDLScript(doc: MHDLDocument): BuildArtifact[] {
   const safeDescription = escapePythonString(meta.description);
 
   lines.push(`#!/usr/bin/env python3`);
+
+  // Medical device disclaimer (if applicable)
+  if (doc.meta?.medical) {
+    lines.push(`# ⚠️ MEDICAL DEVICE: This PCB design requires professional review.`);
+    lines.push(`# Verify trace widths for current capacity, add isolation barriers for`);
+    lines.push(`# patient-applied parts, and test EMC per IEC 60601-1-2 before clinical use.`);
+    lines.push(``);
+  }
+
   lines.push(`"""`);
   lines.push(`SKiDL PCB Netlist Generator — ${safeName}`);
   lines.push(`${safeDescription}`);

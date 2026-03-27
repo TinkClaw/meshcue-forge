@@ -8,6 +8,7 @@
   <meta property="og:title" content="MeshCue Forge — Build Hardware with AI">
   <meta property="og:description" content="Describe your hardware in plain English. Get circuits, firmware, 3D-printable enclosures, and docs instantly.">
   <meta property="og:url" content="https://forge.meshcue.com">
+  <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1609,6 +1610,12 @@ function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 // Auto-resize textarea
 document.getElementById("forgeInput").addEventListener("input",function(){this.style.height="auto";this.style.height=Math.min(this.scrollHeight,120)+"px";});
 document.getElementById("forgeInput").addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();forge();}});
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 
 </body>

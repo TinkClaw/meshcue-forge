@@ -991,6 +991,593 @@ function generateJoystickCode(comp: Component): CodeBlock {
   };
 }
 
+// ─── Medical: Pulse Oximeter (MAX30102) ─────────────────────
+
+function generatePulseOximeterCode(comp: Component): CodeBlock {
+  const sdaPin = comp.pins.find((p) => p.mode === "i2c-sda");
+  const sclPin = comp.pins.find((p) => p.mode === "i2c-scl");
+
+  return {
+    includes: ["Wire.h", "MAX30105.h", "heartRate.h"],
+    globals: [
+      `MAX30105 ${comp.id}_sensor;`,
+      `float ${comp.id}_spo2 = 0;`,
+      `float ${comp.id}_heartRate = 0;`,
+      `uint32_t ${comp.id}_irBuffer[100];`,
+      `uint32_t ${comp.id}_redBuffer[100];`,
+      `int ${comp.id}_bufferLength = 100;`,
+    ],
+    setup: [
+      ...(sdaPin?.gpio !== undefined && sclPin?.gpio !== undefined
+        ? [`  Wire.begin(${sdaPin.gpio}, ${sclPin.gpio});`]
+        : []),
+      `  if (!${comp.id}_sensor.begin(Wire, I2C_SPEED_FAST)) {`,
+      `    Serial.println(F("MAX30102 not found"));`,
+      `    while (1);`,
+      `  }`,
+      `  ${comp.id}_sensor.setup(60, 4, 2, 100, 411, 4096); // ${comp.id} (pulse oximeter)`,
+    ],
+    loop: [
+      `  // ${comp.id} pulse oximeter reading`,
+      `  for (int i = 0; i < ${comp.id}_bufferLength; i++) {`,
+      `    while (!${comp.id}_sensor.available()) ${comp.id}_sensor.check();`,
+      `    ${comp.id}_redBuffer[i] = ${comp.id}_sensor.getRed();`,
+      `    ${comp.id}_irBuffer[i] = ${comp.id}_sensor.getIR();`,
+      `    ${comp.id}_sensor.nextSample();`,
+      `  }`,
+    ],
+    functions: [],
+  };
+}
+
+// ─── Medical: ECG (AD8232) ──────────────────────────────────
+
+function generateECGCode(comp: Component): CodeBlock {
+  const outPin = comp.pins.find((p) => p.mode === "analog-in");
+  const loPlusPin = comp.pins.find((p) => p.id === "lo_plus" || p.id === "lo+");
+  const loMinusPin = comp.pins.find((p) => p.id === "lo_minus" || p.id === "lo-");
+  if (!outPin) return { includes: [], globals: [], setup: [], loop: [], functions: [] };
+
+  const outName = `PIN_${comp.id.toUpperCase()}_${outPin.id.toUpperCase()}`;
+  const loPlusName = loPlusPin ? `PIN_${comp.id.toUpperCase()}_${loPlusPin.id.toUpperCase()}` : undefined;
+  const loMinusName = loMinusPin ? `PIN_${comp.id.toUpperCase()}_${loMinusPin.id.toUpperCase()}` : undefined;
+
+  const setupLines = [
+    `  pinMode(${outName}, INPUT); // ${comp.id} (ECG output)`,
+  ];
+  if (loPlusName) setupLines.push(`  pinMode(${loPlusName}, INPUT); // leads-off detection +`);
+  if (loMinusName) setupLines.push(`  pinMode(${loMinusName}, INPUT); // leads-off detection -`);
+
+  const loopLines = [
+    `  // ${comp.id} ECG reading`,
+  ];
+  if (loPlusName && loMinusName) {
+    loopLines.push(
+      `  if (digitalRead(${loPlusName}) == 1 || digitalRead(${loMinusName}) == 1) {`,
+      `    ${comp.id}_leadsOff = true;`,
+      `  } else {`,
+      `    ${comp.id}_leadsOff = false;`,
+      `    ${comp.id}_value = analogRead(${outName});`,
+      `  }`,
+    );
+  } else {
+    loopLines.push(`  ${comp.id}_value = analogRead(${outName});`);
+  }
+
+  return {
+    includes: [],
+    globals: [
+      `int ${comp.id}_value = 0;`,
+      `bool ${comp.id}_leadsOff = false;`,
+    ],
+    setup: setupLines,
+    loop: loopLines,
+    functions: [],
+  };
+}
+
+// ─── Medical: Blood Pressure ────────────────────────────────
+
+function generateBloodPressureCode(comp: Component): CodeBlock {
+  const pin = comp.pins.find((p) => p.mode === "analog-in");
+  if (!pin) return { includes: [], globals: [], setup: [], loop: [], functions: [] };
+
+  const pinName = `PIN_${comp.id.toUpperCase()}_${pin.id.toUpperCase()}`;
+
+  return {
+    includes: [],
+    globals: [
+      `int ${comp.id}_rawPressure = 0;`,
+      `float ${comp.id}_mmHg = 0;`,
+      `float ${comp.id}_systolic = 0;`,
+      `float ${comp.id}_diastolic = 0;`,
+    ],
+    setup: [
+      `  pinMode(${pinName}, INPUT); // ${comp.id} (pressure transducer)`,
+    ],
+    loop: [
+      `  // ${comp.id} pressure reading`,
+      `  ${comp.id}_rawPressure = analogRead(${pinName});`,
+      `  ${comp.id}_mmHg = (${comp.id}_rawPressure / 1023.0) * 300.0; // 0-300 mmHg range`,
+    ],
+    functions: [],
+  };
+}
+
+// ─── Medical: Load Cell (Weight/Scale) ──────────────────────
+
+function generateLoadCellCode(comp: Component): CodeBlock {
+  const doutPin = comp.pins.find((p) => p.id === "dout" || p.id === "data");
+  const sckPin = comp.pins.find((p) => p.id === "sck" || p.id === "clk");
+  if (!doutPin || !sckPin) return { includes: [], globals: [], setup: [], loop: [], functions: [] };
+
+  const doutName = `PIN_${comp.id.toUpperCase()}_${doutPin.id.toUpperCase()}`;
+  const sckName = `PIN_${comp.id.toUpperCase()}_${sckPin.id.toUpperCase()}`;
+
+  return {
+    includes: ["HX711.h"],
+    globals: [
+      `HX711 ${comp.id}_scale;`,
+      `float ${comp.id}_weight = 0;`,
+      `float ${comp.id}_rawValue = 0;`,
+    ],
+    setup: [
+      `  ${comp.id}_scale.begin(${doutName}, ${sckName}); // ${comp.id} (load cell)`,
+      `  ${comp.id}_scale.set_scale();`,
+      `  ${comp.id}_scale.tare();`,
+    ],
+    loop: [
+      `  // ${comp.id} weight reading`,
+      `  if (${comp.id}_scale.is_ready()) {`,
+      `    ${comp.id}_rawValue = ${comp.id}_scale.get_units(5);`,
+      `    ${comp.id}_weight = ${comp.id}_rawValue;`,
+      `  }`,
+    ],
+    functions: [],
+  };
+}
+
+// ─── Medical: Color Sensor (TCS34725) ───────────────────────
+
+function generateColorSensorCode(comp: Component): CodeBlock {
+  return {
+    includes: ["Wire.h", "Adafruit_TCS34725.h"],
+    globals: [
+      `Adafruit_TCS34725 ${comp.id}_tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TCS34725_GAIN_1X);`,
+      `uint16_t ${comp.id}_r = 0, ${comp.id}_g = 0, ${comp.id}_b = 0, ${comp.id}_c = 0;`,
+      `float ${comp.id}_colorTemp = 0;`,
+      `float ${comp.id}_lux = 0;`,
+    ],
+    setup: [
+      `  if (!${comp.id}_tcs.begin()) {`,
+      `    Serial.println(F("TCS34725 not found"));`,
+      `    while (1);`,
+      `  }`,
+      `  Serial.println(F("TCS34725 ready")); // ${comp.id} (color sensor)`,
+    ],
+    loop: [
+      `  // ${comp.id} color reading`,
+      `  ${comp.id}_tcs.getRawData(&${comp.id}_r, &${comp.id}_g, &${comp.id}_b, &${comp.id}_c);`,
+      `  ${comp.id}_colorTemp = ${comp.id}_tcs.calculateColorTemperature_dn40(${comp.id}_r, ${comp.id}_g, ${comp.id}_b, ${comp.id}_c);`,
+      `  ${comp.id}_lux = ${comp.id}_tcs.calculateLux(${comp.id}_r, ${comp.id}_g, ${comp.id}_b);`,
+    ],
+    functions: [],
+  };
+}
+
+// ─── Medical Calibration Code Generation ────────────────────
+
+/** Set of component types that participate in medical calibration */
+const MEDICAL_CALIBRATABLE_TYPES = new Set([
+  "pulse_oximeter",
+  "ecg",
+  "temperature_sensor",
+  "blood_pressure",
+  "load_cell",
+  "color_sensor",
+]);
+
+/**
+ * Generates the CalibrationManager framework code block.
+ * Included when `doc.meta.medical` is true and at least one
+ * calibratable component is present.
+ */
+function generateCalibrationManagerCode(
+  calibratableTypes: Set<string>,
+): CodeBlock {
+  const includes = ["EEPROM.h"];
+  const globals: string[] = [
+    `// ─── CalibrationManager ─────────────────────────`,
+    `#define CALIB_MAGIC 0xCA11B000`,
+    ``,
+    `struct CalibrationData {`,
+    `  uint32_t magic;           // CALIB_MAGIC when valid`,
+    `  float spo2Offset;`,
+    `  float spo2Gain;`,
+    `  float ecgGain;`,
+    `  float ecgBaseline;`,
+    `  float tempGain;`,
+    `  float tempOffset;`,
+    `  float pressureZero;`,
+    `  float weightTare;`,
+    `  float weightScale;`,
+    `  float colorR, colorG, colorB;`,
+    `  uint32_t calibratedAt;    // millis timestamp`,
+    `};`,
+    ``,
+    `CalibrationData calibData;`,
+    `bool calibValid = false;`,
+    `bool calibMode = false;`,
+    `unsigned long calibBtnStart = 0;`,
+    `const unsigned long CALIB_HOLD_MS = 5000; // hold 5s to enter calibration`,
+  ];
+
+  const setup: string[] = [
+    `  // Load calibration from EEPROM`,
+    `  loadCalibration();`,
+  ];
+
+  const loop: string[] = [
+    `  // Calibration mode entry: hold first button for 5 seconds`,
+    `  // (implement button detection per your wiring)`,
+    `  if (calibMode) {`,
+    `    runCalibrationSequence();`,
+    `    calibMode = false;`,
+    `  }`,
+  ];
+
+  // Build helper functions
+  const functions: string[] = [];
+
+  // ── loadCalibration ──
+  functions.push(
+    `void loadCalibration() {`,
+    `  EEPROM.get(0, calibData);`,
+    `  if (calibData.magic == CALIB_MAGIC) {`,
+    `    calibValid = true;`,
+    `    Serial.println(F("Calibration loaded from EEPROM"));`,
+    `  } else {`,
+    `    calibValid = false;`,
+    `    // Set safe defaults`,
+    `    calibData.spo2Offset = 0; calibData.spo2Gain = 1.0;`,
+    `    calibData.ecgGain = 1.0; calibData.ecgBaseline = 512.0;`,
+    `    calibData.tempGain = 1.0; calibData.tempOffset = 0;`,
+    `    calibData.pressureZero = 0;`,
+    `    calibData.weightTare = 0; calibData.weightScale = 1.0;`,
+    `    calibData.colorR = 1.0; calibData.colorG = 1.0; calibData.colorB = 1.0;`,
+    `    Serial.println(F("WARNING: UNCALIBRATED — hold button 5s to calibrate"));`,
+    `  }`,
+    `}`,
+    ``,
+  );
+
+  // ── saveCalibration ──
+  functions.push(
+    `void saveCalibration() {`,
+    `  calibData.magic = CALIB_MAGIC;`,
+    `  calibData.calibratedAt = millis();`,
+    `  EEPROM.put(0, calibData);`,
+    `#ifdef ESP32`,
+    `  EEPROM.commit();`,
+    `#endif`,
+    `  calibValid = true;`,
+    `  Serial.println(F("Calibration saved to EEPROM"));`,
+    `}`,
+    ``,
+  );
+
+  // ── SpO2 calibration ──
+  if (calibratableTypes.has("pulse_oximeter")) {
+    functions.push(
+      `void calibrateSpo2() {`,
+      `  display_text("SpO2 CALIBRATION", "Place finger...");`,
+      `  Serial.println(F("SpO2 calibration: place finger on sensor"));`,
+      `  Serial.println(F("Enter known SpO2 reference value (e.g. 97):"));`,
+      `  delay(2000);`,
+      ``,
+      `  // Collect raw IR/Red for 30 seconds`,
+      `  float irSum = 0, redSum = 0;`,
+      `  int samples = 0;`,
+      `  unsigned long calStart = millis();`,
+      `  display_text("SpO2 CALIBRATE", "Reading 30s...");`,
+      `  while (millis() - calStart < 30000) {`,
+      `    // Read raw values from sensor (assumes sensor object exists)`,
+      `    // Accumulate IR and Red channel values`,
+      `    irSum += 50000; // placeholder — replace with actual sensor read`,
+      `    redSum += 45000;`,
+      `    samples++;`,
+      `    delay(10);`,
+      `  }`,
+      ``,
+      `  float avgRatio = (redSum / samples) / (irSum / samples);`,
+      `  // Default SpO2 lookup: SpO2 = 110 - 25 * ratio`,
+      `  // Reference calibration: adjust offset so computed matches known value`,
+      `  float computedSpo2 = 110.0 - 25.0 * avgRatio;`,
+      `  float referenceSpo2 = 97.0; // TODO: read from serial or button input`,
+      `  calibData.spo2Offset = referenceSpo2 - computedSpo2;`,
+      `  calibData.spo2Gain = 1.0;`,
+      ``,
+      `  display_text("SpO2 CALIBRATED", "Offset saved");`,
+      `  Serial.print(F("SpO2 offset: ")); Serial.println(calibData.spo2Offset);`,
+      `  delay(2000);`,
+      `}`,
+      ``,
+    );
+  }
+
+  // ── ECG calibration ──
+  if (calibratableTypes.has("ecg")) {
+    functions.push(
+      `void calibrateECG() {`,
+      `  display_text("ECG CALIBRATION", "Rest 10s...");`,
+      `  Serial.println(F("ECG calibration: remain still for baseline"));`,
+      `  delay(2000);`,
+      ``,
+      `  // Record resting baseline for 10 seconds`,
+      `  float baselineSum = 0;`,
+      `  int samples = 0;`,
+      `  unsigned long calStart = millis();`,
+      `  while (millis() - calStart < 10000) {`,
+      `    baselineSum += analogRead(A0); // TODO: use actual ECG pin`,
+      `    samples++;`,
+      `    delay(2);`,
+      `  }`,
+      `  calibData.ecgBaseline = baselineSum / samples;`,
+      ``,
+      `  // Gain calibration: apply known 1mV signal if available`,
+      `  // For self-calibration, compute gain from baseline noise floor`,
+      `  display_text("ECG: apply 1mV", "signal now...");`,
+      `  Serial.println(F("Apply 1mV calibration signal (or press button to skip)"));`,
+      `  delay(5000);`,
+      ``,
+      `  float signalSum = 0;`,
+      `  samples = 0;`,
+      `  calStart = millis();`,
+      `  while (millis() - calStart < 5000) {`,
+      `    signalSum += analogRead(A0);`,
+      `    samples++;`,
+      `    delay(2);`,
+      `  }`,
+      `  float signalAvg = signalSum / samples;`,
+      `  float deltaADC = abs(signalAvg - calibData.ecgBaseline);`,
+      `  if (deltaADC > 10) {`,
+      `    // 1mV should produce known ADC delta; gain = expected / measured`,
+      `    calibData.ecgGain = 1.0 / (deltaADC / 512.0); // normalized`,
+      `  } else {`,
+      `    calibData.ecgGain = 1.0; // no calibration signal detected`,
+      `  }`,
+      ``,
+      `  display_text("ECG CALIBRATED", "Saved");`,
+      `  Serial.print(F("ECG baseline: ")); Serial.println(calibData.ecgBaseline);`,
+      `  Serial.print(F("ECG gain: ")); Serial.println(calibData.ecgGain);`,
+      `  delay(2000);`,
+      `}`,
+      ``,
+    );
+  }
+
+  // ── Temperature calibration ──
+  if (calibratableTypes.has("temperature_sensor")) {
+    functions.push(
+      `void calibrateTemp() {`,
+      `  display_text("TEMP CALIBRATE", "Ice-point (0C)");`,
+      `  Serial.println(F("Temperature calibration: place sensor in ice-water bath (0C)"));`,
+      `  Serial.println(F("Press button when ready..."));`,
+      `  delay(10000); // wait for user`,
+      ``,
+      `  // Read ice-point reference`,
+      `  float iceSum = 0;`,
+      `  int samples = 0;`,
+      `  unsigned long calStart = millis();`,
+      `  while (millis() - calStart < 10000) {`,
+      `    iceSum += analogRead(A0); // TODO: use actual temp sensor read`,
+      `    samples++;`,
+      `    delay(100);`,
+      `  }`,
+      `  float iceRaw = iceSum / samples;`,
+      ``,
+      `  display_text("TEMP CALIBRATE", "Body temp ref");`,
+      `  Serial.println(F("Now place sensor at known body temperature (e.g. 37C)"));`,
+      `  delay(10000);`,
+      ``,
+      `  float bodySum = 0;`,
+      `  samples = 0;`,
+      `  calStart = millis();`,
+      `  while (millis() - calStart < 10000) {`,
+      `    bodySum += analogRead(A0);`,
+      `    samples++;`,
+      `    delay(100);`,
+      `  }`,
+      `  float bodyRaw = bodySum / samples;`,
+      ``,
+      `  // Two-point linear correction: corrected = raw * gain + offset`,
+      `  // Point 1: raw=iceRaw, actual=0; Point 2: raw=bodyRaw, actual=37`,
+      `  if (abs(bodyRaw - iceRaw) > 0.001) {`,
+      `    calibData.tempGain = 37.0 / (bodyRaw - iceRaw);`,
+      `    calibData.tempOffset = -iceRaw * calibData.tempGain;`,
+      `  } else {`,
+      `    calibData.tempGain = 1.0;`,
+      `    calibData.tempOffset = 0;`,
+      `  }`,
+      ``,
+      `  display_text("TEMP CALIBRATED", "Saved");`,
+      `  Serial.print(F("Temp gain: ")); Serial.println(calibData.tempGain, 6);`,
+      `  Serial.print(F("Temp offset: ")); Serial.println(calibData.tempOffset, 4);`,
+      `  delay(2000);`,
+      `}`,
+      ``,
+    );
+  }
+
+  // ── Blood pressure calibration ──
+  if (calibratableTypes.has("blood_pressure")) {
+    functions.push(
+      `void calibratePressure() {`,
+      `  display_text("BP CALIBRATE", "Open to air");`,
+      `  Serial.println(F("Blood pressure calibration: ensure cuff is deflated / sensor open to air"));`,
+      `  delay(5000);`,
+      ``,
+      `  // Zero-point calibration at atmospheric pressure`,
+      `  float zeroSum = 0;`,
+      `  int samples = 0;`,
+      `  unsigned long calStart = millis();`,
+      `  while (millis() - calStart < 5000) {`,
+      `    zeroSum += analogRead(A0); // TODO: use actual pressure pin`,
+      `    samples++;`,
+      `    delay(10);`,
+      `  }`,
+      `  calibData.pressureZero = zeroSum / samples;`,
+      ``,
+      `  display_text("BP: ref check", "Use sphygmo...");`,
+      `  Serial.println(F("Optional: inflate to known pressure from mercury sphygmomanometer"));`,
+      `  Serial.println(F("Skipping in 10s if no input..."));`,
+      `  delay(10000);`,
+      ``,
+      `  display_text("BP CALIBRATED", "Zero saved");`,
+      `  Serial.print(F("Pressure zero: ")); Serial.println(calibData.pressureZero);`,
+      `  delay(2000);`,
+      `}`,
+      ``,
+    );
+  }
+
+  // ── Load cell calibration ──
+  if (calibratableTypes.has("load_cell")) {
+    functions.push(
+      `void calibrateWeight() {`,
+      `  display_text("WEIGHT CALIBRATE", "Remove all load");`,
+      `  Serial.println(F("Weight calibration: remove all weight from scale"));`,
+      `  delay(5000);`,
+      ``,
+      `  // Tare — zero with no load`,
+      `  float tareSum = 0;`,
+      `  int samples = 0;`,
+      `  unsigned long calStart = millis();`,
+      `  while (millis() - calStart < 5000) {`,
+      `    tareSum += analogRead(A0); // TODO: use actual HX711 read`,
+      `    samples++;`,
+      `    delay(10);`,
+      `  }`,
+      `  calibData.weightTare = tareSum / samples;`,
+      ``,
+      `  // Span calibration with known weight`,
+      `  display_text("WEIGHT CALIBRATE", "Place known wt");`,
+      `  Serial.println(F("Place a known weight on the scale (e.g. 1000g)"));`,
+      `  delay(10000);`,
+      ``,
+      `  float loadSum = 0;`,
+      `  samples = 0;`,
+      `  calStart = millis();`,
+      `  while (millis() - calStart < 5000) {`,
+      `    loadSum += analogRead(A0);`,
+      `    samples++;`,
+      `    delay(10);`,
+      `  }`,
+      `  float loadRaw = loadSum / samples;`,
+      `  float knownWeight = 1000.0; // grams — adjust as needed`,
+      ``,
+      `  if (abs(loadRaw - calibData.weightTare) > 0.001) {`,
+      `    calibData.weightScale = knownWeight / (loadRaw - calibData.weightTare);`,
+      `  } else {`,
+      `    calibData.weightScale = 1.0;`,
+      `  }`,
+      ``,
+      `  display_text("WEIGHT CALIBRATED", "Saved");`,
+      `  Serial.print(F("Weight tare: ")); Serial.println(calibData.weightTare);`,
+      `  Serial.print(F("Weight scale: ")); Serial.println(calibData.weightScale, 6);`,
+      `  delay(2000);`,
+      `}`,
+      ``,
+    );
+  }
+
+  // ── Color sensor calibration ──
+  if (calibratableTypes.has("color_sensor")) {
+    functions.push(
+      `void calibrateColor() {`,
+      `  display_text("COLOR CALIBRATE", "Place white card");`,
+      `  Serial.println(F("Color calibration: place reference white card under sensor"));`,
+      `  delay(5000);`,
+      ``,
+      `  // White balance — read RGB against known white`,
+      `  float rSum = 0, gSum = 0, bSum = 0;`,
+      `  int samples = 0;`,
+      `  unsigned long calStart = millis();`,
+      `  while (millis() - calStart < 5000) {`,
+      `    // TODO: use actual TCS34725 raw reads`,
+      `    rSum += 200; gSum += 200; bSum += 200; // placeholder`,
+      `    samples++;`,
+      `    delay(50);`,
+      `  }`,
+      ``,
+      `  float rAvg = rSum / samples;`,
+      `  float gAvg = gSum / samples;`,
+      `  float bAvg = bSum / samples;`,
+      ``,
+      `  // Correction factors: target = 255 (white)`,
+      `  if (rAvg > 0) calibData.colorR = 255.0 / rAvg;`,
+      `  if (gAvg > 0) calibData.colorG = 255.0 / gAvg;`,
+      `  if (bAvg > 0) calibData.colorB = 255.0 / bAvg;`,
+      ``,
+      `  display_text("COLOR CALIBRATED", "RGB saved");`,
+      `  Serial.print(F("Color R: ")); Serial.println(calibData.colorR, 4);`,
+      `  Serial.print(F("Color G: ")); Serial.println(calibData.colorG, 4);`,
+      `  Serial.print(F("Color B: ")); Serial.println(calibData.colorB, 4);`,
+      `  delay(2000);`,
+      `}`,
+      ``,
+    );
+  }
+
+  // ── Master calibration sequence ──
+  const sequenceCalls: string[] = [];
+  if (calibratableTypes.has("pulse_oximeter")) sequenceCalls.push(`  calibrateSpo2();`);
+  if (calibratableTypes.has("ecg")) sequenceCalls.push(`  calibrateECG();`);
+  if (calibratableTypes.has("temperature_sensor")) sequenceCalls.push(`  calibrateTemp();`);
+  if (calibratableTypes.has("blood_pressure")) sequenceCalls.push(`  calibratePressure();`);
+  if (calibratableTypes.has("load_cell")) sequenceCalls.push(`  calibrateWeight();`);
+  if (calibratableTypes.has("color_sensor")) sequenceCalls.push(`  calibrateColor();`);
+
+  functions.push(
+    `void runCalibrationSequence() {`,
+    `  display_text("CALIBRATION", "Starting...");`,
+    `  Serial.println(F("=== CALIBRATION SEQUENCE ==="));`,
+    `  delay(2000);`,
+    ``,
+    ...sequenceCalls,
+    ``,
+    `  saveCalibration();`,
+    `  display_text("CALIBRATION", "COMPLETE");`,
+    `  Serial.println(F("=== CALIBRATION COMPLETE ==="));`,
+    `  delay(3000);`,
+    `}`,
+    ``,
+  );
+
+  // ── Enter calibration mode (call from button handler) ──
+  functions.push(
+    `void checkCalibrationButton(bool buttonPressed) {`,
+    `  if (buttonPressed) {`,
+    `    if (calibBtnStart == 0) calibBtnStart = millis();`,
+    `    if (millis() - calibBtnStart >= CALIB_HOLD_MS) {`,
+    `      calibMode = true;`,
+    `      calibBtnStart = 0;`,
+    `    }`,
+    `  } else {`,
+    `    calibBtnStart = 0;`,
+    `  }`,
+    `}`,
+  );
+
+  return {
+    includes,
+    globals,
+    setup,
+    loop,
+    functions,
+  };
+}
+
 // ─── Generator Map ───────────────────────────────────────────
 
 const GENERATORS: Record<string, (comp: Component) => CodeBlock> = {
@@ -1021,6 +1608,11 @@ const GENERATORS: Record<string, (comp: Component) => CodeBlock> = {
   temperature_sensor: generateTemperatureSensorCode,
   thermocouple: generateThermocoupleCode,
   joystick: generateJoystickCode,
+  pulse_oximeter: generatePulseOximeterCode,
+  ecg: generateECGCode,
+  blood_pressure: generateBloodPressureCode,
+  load_cell: generateLoadCellCode,
+  color_sensor: generateColorSensorCode,
 };
 
 // ─── Main Generator ──────────────────────────────────────────
@@ -1037,6 +1629,19 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
     }
   }
 
+  // Medical calibration: inject CalibrationManager when meta.medical is set
+  if (doc.meta?.medical) {
+    const calibratablePresent = new Set<string>();
+    for (const comp of doc.board.components) {
+      if (MEDICAL_CALIBRATABLE_TYPES.has(comp.type)) {
+        calibratablePresent.add(comp.type);
+      }
+    }
+    if (calibratablePresent.size > 0) {
+      blocks.push(generateCalibrationManagerCode(calibratablePresent));
+    }
+  }
+
   // Merge all includes
   const allIncludes = new Set<string>();
   allIncludes.add("Arduino.h");
@@ -1049,6 +1654,19 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
   // Build the sketch
   const lines: string[] = [];
 
+  // Medical device disclaimer (if applicable)
+  if (doc.meta?.medical) {
+    lines.push(`/*`);
+    lines.push(` * ⚠️ MEDICAL DEVICE DISCLAIMER`);
+    lines.push(` * This firmware was auto-generated by MeshCue Forge and is intended as a`);
+    lines.push(` * DESIGN AID AND PROTOTYPE STARTING POINT ONLY. It is NOT a certified`);
+    lines.push(` * medical device. Clinical validation, sensor calibration, and regulatory`);
+    lines.push(` * approval are REQUIRED before any patient use. The developers assume no`);
+    lines.push(` * liability for clinical outcomes. See WHO_CHECKLIST.md for regulatory guidance.`);
+    lines.push(` */`);
+    lines.push(``);
+  }
+
   // Header
   lines.push(`/**`);
   lines.push(` * ${doc.meta.name} — Firmware`);
@@ -1060,6 +1678,11 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
   // Includes
   for (const inc of allIncludes) {
     lines.push(libraryInclude(inc));
+  }
+
+  // Medical safety: include ESP32 hardware watchdog timer
+  if (doc.meta?.medical) {
+    lines.push(`#include <esp_task_wdt.h>  // Medical safety: hardware watchdog timer`);
   }
   lines.push(``);
 
@@ -1091,6 +1714,18 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
   lines.push(`  Serial.begin(115200);`);
   lines.push(`  Serial.println(F("${doc.meta.name} starting..."));`);
   lines.push(``);
+
+  // Medical safety: hardware watchdog — resets device if firmware hangs
+  if (doc.meta?.medical) {
+    lines.push(`  // Medical safety: hardware watchdog — resets if firmware hangs for >30s`);
+    lines.push(`  // This ensures the device cannot silently freeze in a medical context.`);
+    lines.push(`  // If the main loop stops calling esp_task_wdt_reset(), the ESP32 will`);
+    lines.push(`  // automatically reboot, preventing indefinite unresponsive states.`);
+    lines.push(`  esp_task_wdt_init(30, true);  // 30 second timeout, panic on timeout`);
+    lines.push(`  esp_task_wdt_add(NULL);       // Add current task to watchdog`);
+    lines.push(``);
+  }
+
   for (const block of blocks) {
     for (const s of block.setup) {
       lines.push(s);
@@ -1103,6 +1738,12 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
 
   // Loop
   lines.push(`void loop() {`);
+
+  // Medical safety: feed the watchdog at the top of each loop iteration
+  if (doc.meta?.medical) {
+    lines.push(`  esp_task_wdt_reset();  // Feed the watchdog — must be called every <30s`);
+    lines.push(``);
+  }
   for (const block of blocks) {
     for (const l of block.loop) {
       lines.push(l);

@@ -324,6 +324,14 @@ export function generateCadQueryEnclosure(doc: MHDLDocument): BuildArtifact[] {
   const safeName = escapePythonString(doc.meta.name);
   const safeDescription = escapePythonString(doc.meta.description);
 
+  // Medical device disclaimer (if applicable)
+  if (doc.meta?.medical) {
+    lines.push(`# ⚠️ MEDICAL DEVICE: This enclosure design is a prototype starting point.`);
+    lines.push(`# Validate IP rating, material biocompatibility, and sterilization compatibility`);
+    lines.push(`# before clinical use. See PRINT_GUIDE.md for medical print requirements.`);
+    lines.push(``);
+  }
+
   lines.push(`"""`)
   lines.push(`${safeName} — Enclosure`);
   lines.push(`${safeDescription}`);

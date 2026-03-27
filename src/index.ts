@@ -143,6 +143,14 @@ server.tool(
         };
       }
 
+      // Check if this is a medical device build
+      const isMedicalBuild = !!(
+        doc.meta?.medical ||
+        result.artifacts.some((a) =>
+          ["WHO_CHECKLIST.md", "IEC62304_SOFTWARE_LIFECYCLE.md", "FMEA.csv", "CE_GUIDANCE.md", "BATTERY_LIFE_ESTIMATE.md", "FIELD_TEST_CHECKLIST.md"].includes(a.filename)
+        )
+      );
+
       // Return artifacts as structured output
       const output: Record<string, unknown> = {
         success: true,
@@ -169,11 +177,16 @@ server.tool(
       }
       output.files = files;
 
+      // Prepend medical disclaimer to response text if applicable
+      const medicalDisclaimer = isMedicalBuild
+        ? "⚠️ MEDICAL DEVICE OUTPUT: These artifacts are design aids for prototyping only. Clinical validation, sensor calibration, and regulatory approval are required before patient use.\n\n"
+        : "";
+
       return {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(output, null, 2),
+            text: medicalDisclaimer + JSON.stringify(output, null, 2),
           },
         ],
       };
