@@ -28,6 +28,8 @@ import type {
 import { renderTemplate } from "./templates.js";
 import { ConsentManager } from "./consent.js";
 import type { ConnectStore } from "./store.js";
+import { DeliveryManager } from "./delivery.js";
+import type { DeliveryResult } from "./delivery.js";
 
 // ─── Keyword Patterns ────────────────────────────────────────
 
@@ -168,19 +170,23 @@ export class MessageRouter {
   private clinicProviders: Map<string, Map<Channel, ChannelProvider>> = new Map();
   private offlineQueue: ConnectMessage[] = [];
   private consent: ConsentManager;
+  private deliveryManager: DeliveryManager;
 
   constructor(config: ConnectConfig, store?: ConnectStore) {
     this.config = config;
     this.store = store;
     this.consent = new ConsentManager();
     this.consent.setSendFunction((msg) => this.send(msg));
+    this.deliveryManager = new DeliveryManager();
   }
 
   /**
    * Register a global channel provider (fallback when clinic has no provider).
+   * Also registers the provider with the delivery manager for fallback chain.
    */
   registerProvider(provider: ChannelProvider): void {
     this.providers.set(provider.channel, provider);
+    this.deliveryManager.registerProvider(provider);
   }
 
   /**
@@ -207,6 +213,14 @@ export class MessageRouter {
    */
   getStore(): ConnectStore | undefined {
     return this.store;
+  }
+
+  /**
+   * Get the delivery manager for direct access to delivery tracking
+   * and retry controls.
+   */
+  getDeliveryManager(): DeliveryManager {
+    return this.deliveryManager;
   }
 
   // ─── Clinic Config Resolution ─────────────────────────────
@@ -253,14 +267,15 @@ export class MessageRouter {
   /**
    * Takes a device alert, triages it, and creates/sends messages
    * for all relevant recipients based on triage rules.
-   * Uses the clinic's own credentials for channel delivery.
+   * Uses the delivery manager for channel fallback and tracking.
+   * Returns DeliveryResult[] with full attempt history.
    */
   async route(
     alert: DeviceAlert,
     patient: PatientContact
-  ): Promise<ConnectMessage[]> {
+  ): Promise<DeliveryResult[]> {
     const triageResult = this.triage(alert);
-    const messages: ConnectMessage[] = [];
+    const deliveryResults: DeliveryResult[] = [];
 
     // Resolve config from clinic-owned credentials
     const clinicConfig = this.getClinicConfig(patient.clinicId);
@@ -289,23 +304,31 @@ export class MessageRouter {
 
         if (action.delay && action.delay > 0) {
           setTimeout(() => {
-            this.send(msg).catch(() => this.queueMessage(msg));
+            this.deliveryManager.send(msg, clinicConfig).catch(() => this.queueMessage(msg));
           }, action.delay * 1000);
           msg.status = "queued";
-          messages.push(msg);
+          // Create a placeholder delivery result for delayed messages
+          deliveryResults.push({
+            messageId: msg.id,
+            to: msg.to,
+            status: "queued",
+            channel: msg.channel,
+            attempts: [],
+          });
         } else {
-          try {
-            const sent = await this.send(msg);
-            messages.push(sent);
-          } catch {
-            this.queueMessage(msg);
-            messages.push(msg);
+          const result = await this.deliveryManager.send(msg, clinicConfig);
+          // Persist to store on success
+          if (result.status === "delivered") {
+            msg.status = "delivered";
+            msg.sentAt = new Date().toISOString();
+            this.store?.storeMessage(msg);
           }
+          deliveryResults.push(result);
         }
       }
     }
 
-    return messages;
+    return deliveryResults;
   }
 
   /**

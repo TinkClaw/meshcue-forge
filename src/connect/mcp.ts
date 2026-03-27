@@ -18,6 +18,13 @@ import type {
   ConnectConfig,
 } from "./types.js";
 import { loadConnectConfig } from "./config.js";
+import {
+  ClinicAuth,
+  RateLimiter,
+  AuditLogger,
+  authenticateToolCall,
+  type AuditEntry,
+} from "./auth.js";
 
 // ─── Clinic Types ────────────────────────────────────────────
 
@@ -430,6 +437,75 @@ function classifyIncoming(body: string): {
 
 export function registerConnectTools(server: McpServer): void {
   const store = new ConnectStore();
+  const auth = new ClinicAuth();
+  const rateLimiter = new RateLimiter();
+  const auditLogger = new AuditLogger();
+
+  /**
+   * Authenticate, rate-limit, and audit a tool call.
+   * Returns an error response object if the call should be rejected, or null if allowed.
+   * Also returns an optional warning string for backward-compat unauthenticated calls.
+   */
+  function guardToolCall(
+    toolName: string,
+    clinicId: string,
+    apiKey?: string,
+    action: "api" | "message" = "api"
+  ): { error: ReturnType<typeof err> } | { error: null; warning?: string } {
+    // Authenticate
+    const authResult = authenticateToolCall(auth, clinicId, apiKey);
+    if (typeof authResult === "string") {
+      auditLogger.log({
+        id: randomUUID(),
+        timestamp: nowISO(),
+        clinicId,
+        action: "auth_failure",
+        tool: toolName,
+        success: false,
+        apiKeyUsed: !!apiKey,
+        metadata: { reason: authResult },
+      });
+      return { error: err(authResult) };
+    }
+
+    // Rate limit — look up the clinic tier
+    const clinic = store.getClinic(clinicId);
+    const tier = clinic?.tier || "free";
+    const rateCheck = rateLimiter.checkLimit(clinicId, action, tier);
+    if (!rateCheck.allowed) {
+      auditLogger.log({
+        id: randomUUID(),
+        timestamp: nowISO(),
+        clinicId,
+        action: "rate_limited",
+        tool: toolName,
+        success: false,
+        apiKeyUsed: !!apiKey,
+        metadata: { retryAfterMs: rateCheck.retryAfterMs },
+      });
+      return {
+        error: err(
+          `Rate limit exceeded. Retry after ${rateCheck.retryAfterMs}ms.`
+        ),
+      };
+    }
+
+    // Record API usage
+    rateLimiter.recordUsage(clinicId, action);
+
+    // Audit
+    auditLogger.log({
+      id: randomUUID(),
+      timestamp: nowISO(),
+      clinicId,
+      action: "tool_call",
+      tool: toolName,
+      success: true,
+      apiKeyUsed: !!apiKey,
+    });
+
+    return { error: null, warning: authResult.warning };
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // CLINIC ADMINISTRATION TOOLS
@@ -482,11 +558,26 @@ export function registerConnectTools(server: McpServer): void {
 
         store.clinics.set(clinicId, clinic);
 
+        // Generate API key for the new clinic
+        const apiKey = auth.generateApiKey(clinicId);
+
+        // Audit the registration
+        auditLogger.log({
+          id: randomUUID(),
+          timestamp: nowISO(),
+          clinicId,
+          action: "clinic_registered",
+          tool: "meshcue-clinic-register",
+          success: true,
+          apiKeyUsed: false,
+        });
+
         return ok({
           clinicId,
           name,
           tier: selectedTier,
-          message: `Clinic '${name}' registered successfully. Use the clinicId '${clinicId}' to configure channels and manage patients.`,
+          apiKey,
+          message: `Clinic '${name}' registered successfully. Use the clinicId '${clinicId}' and the apiKey to configure channels and manage patients. Store the apiKey securely — it cannot be retrieved later.`,
         });
       } catch (e) {
         return err(`Clinic registration error: ${e instanceof Error ? e.message : String(e)}`);
@@ -501,10 +592,11 @@ export function registerConnectTools(server: McpServer): void {
       "and Vonage providers. Sends a test SMS to the admin phone on success.",
     {
       clinicId: z.string().describe("Clinic ID returned from meshcue-clinic-register"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       provider: z
         .enum(["africastalking", "twilio", "vonage"])
         .describe("SMS provider"),
-      apiKey: z.string().describe("Provider API key (or Twilio Auth Token)"),
+      providerApiKey: z.string().describe("Provider API key (or Twilio Auth Token)"),
       apiSecret: z
         .string()
         .optional()
@@ -522,8 +614,11 @@ export function registerConnectTools(server: McpServer): void {
         .optional()
         .describe("Alphanumeric sender ID, e.g. 'MyClinic'"),
     },
-    async ({ clinicId, provider, apiKey, apiSecret, username, shortCode, senderId }) => {
+    async ({ clinicId, apiKey, provider, providerApiKey, apiSecret, username, shortCode, senderId }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-setup-sms", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.requireClinic(clinicId);
 
         if (provider === "africastalking" && !username) {
@@ -532,7 +627,7 @@ export function registerConnectTools(server: McpServer): void {
 
         const smsConfig: ClinicSmsConfig = {
           provider,
-          apiKey,
+          apiKey: providerApiKey,
           apiSecret,
           username,
           shortCode,
@@ -585,6 +680,7 @@ export function registerConnectTools(server: McpServer): void {
     "Configure WhatsApp Business API channel for a clinic using Meta Cloud API credentials.",
     {
       clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       token: z.string().describe("WhatsApp Business API permanent token"),
       phoneId: z.string().describe("WhatsApp phone number ID from Meta Business Manager"),
       businessName: z
@@ -592,8 +688,11 @@ export function registerConnectTools(server: McpServer): void {
         .optional()
         .describe("WhatsApp Business display name"),
     },
-    async ({ clinicId, token, phoneId, businessName }) => {
+    async ({ clinicId, apiKey, token, phoneId, businessName }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-setup-whatsapp", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.requireClinic(clinicId);
 
         clinic.channels.whatsapp = {
@@ -620,10 +719,11 @@ export function registerConnectTools(server: McpServer): void {
     "Configure voice/IVR channel for a clinic. Supports Africa's Talking and Twilio voice APIs.",
     {
       clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       provider: z
         .enum(["africastalking", "twilio"])
         .describe("Voice provider"),
-      apiKey: z
+      voiceApiKey: z
         .string()
         .optional()
         .describe("Africa's Talking API key (required for AT provider)"),
@@ -640,12 +740,15 @@ export function registerConnectTools(server: McpServer): void {
         .optional()
         .describe("Voice-enabled phone number in E.164 format"),
     },
-    async ({ clinicId, provider, apiKey, sid, token, phone }) => {
+    async ({ clinicId, apiKey, provider, voiceApiKey, sid, token, phone }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-setup-voice", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.requireClinic(clinicId);
 
-        if (provider === "africastalking" && !apiKey) {
-          return err("Africa's Talking voice requires an 'apiKey' parameter.");
+        if (provider === "africastalking" && !voiceApiKey) {
+          return err("Africa's Talking voice requires a 'voiceApiKey' parameter.");
         }
         if (provider === "twilio" && (!sid || !token)) {
           return err("Twilio voice requires both 'sid' and 'token' parameters.");
@@ -653,7 +756,7 @@ export function registerConnectTools(server: McpServer): void {
 
         clinic.channels.voice = {
           provider,
-          apiKey,
+          apiKey: voiceApiKey,
           sid,
           token,
           phone,
@@ -678,9 +781,13 @@ export function registerConnectTools(server: McpServer): void {
       "configured channels, and recent alerts.",
     {
       clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
     },
-    async ({ clinicId }) => {
+    async ({ clinicId, apiKey }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-dashboard", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.requireClinic(clinicId);
         const limits = TIER_LIMITS[clinic.tier] || TIER_LIMITS.free;
 
@@ -749,13 +856,17 @@ export function registerConnectTools(server: McpServer): void {
     "List patients registered under a specific clinic.",
     {
       clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       limit: z
         .number()
         .optional()
         .describe("Max number of patients to return. Default: 50"),
     },
-    async ({ clinicId, limit }) => {
+    async ({ clinicId, apiKey, limit }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-patients", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         store.requireClinic(clinicId);
         const all = store.getPatientsForClinic(clinicId);
         const cap = limit ?? 50;
@@ -777,6 +888,7 @@ export function registerConnectTools(server: McpServer): void {
     "View message history for a clinic, optionally filtered by patient.",
     {
       clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       patientId: z
         .string()
         .optional()
@@ -786,8 +898,11 @@ export function registerConnectTools(server: McpServer): void {
         .optional()
         .describe("Max number of messages to return. Default: 50"),
     },
-    async ({ clinicId, patientId, limit }) => {
+    async ({ clinicId, apiKey, patientId, limit }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-messages", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         store.requireClinic(clinicId);
         const all = store.getMessagesForClinic(clinicId, patientId);
         const cap = limit ?? 50;
@@ -809,6 +924,7 @@ export function registerConnectTools(server: McpServer): void {
     "Send a test message through a configured channel to verify it works.",
     {
       clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       channel: z
         .enum(["sms", "whatsapp", "voice"])
         .describe("Channel to test"),
@@ -817,8 +933,11 @@ export function registerConnectTools(server: McpServer): void {
         .optional()
         .describe("Phone to send the test to. Default: clinic admin phone"),
     },
-    async ({ clinicId, channel, testPhone }) => {
+    async ({ clinicId, apiKey, channel, testPhone }) => {
       try {
+        const guard = guardToolCall("meshcue-clinic-test-channel", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.requireClinic(clinicId);
 
         // Check channel is configured
@@ -883,6 +1002,7 @@ export function registerConnectTools(server: McpServer): void {
       deviceId: z.string().describe("Device ID that generated the alert"),
       patientId: z.string().describe("Patient ID linked to the device"),
       clinicId: z.string().describe("Clinic ID where the patient is registered"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       reading: z.string().describe("Vital sign name, e.g. 'SpO2', 'HR', 'Temp'"),
       value: z.number().describe("The measured value"),
       unit: z.string().describe("Unit of measurement, e.g. '%', 'bpm', 'C'"),
@@ -891,8 +1011,11 @@ export function registerConnectTools(server: McpServer): void {
         .enum(["critical", "warning", "info"])
         .describe("Alert severity level"),
     },
-    async ({ deviceId, patientId, clinicId, reading, value, unit, threshold, severity }) => {
+    async ({ deviceId, patientId, clinicId, apiKey, reading, value, unit, threshold, severity }) => {
       try {
+        const guard = guardToolCall("meshcue-connect-alert", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.getClinic(clinicId);
         const alert = { deviceId, patientId, clinicId, reading, value, unit, threshold, severity };
         const triage = triageAlert(severity, reading, value, threshold);
@@ -933,6 +1056,7 @@ export function registerConnectTools(server: McpServer): void {
         .string()
         .optional()
         .describe("Clinic ID to use for credentials and sender ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       to: z.string().describe("Recipient phone number in E.164 format"),
       template: z.string().describe("Template name, e.g. 'appointment_reminder', 'welcome'"),
       data: z
@@ -947,8 +1071,12 @@ export function registerConnectTools(server: McpServer): void {
         .optional()
         .describe("Language code, e.g. 'en', 'fr', 'sw'. Default: configured default"),
     },
-    async ({ clinicId, to, template, data, channel, language }) => {
+    async ({ clinicId, apiKey, to, template, data, channel, language }) => {
       try {
+        if (clinicId) {
+          const guard = guardToolCall("meshcue-connect-send", clinicId, apiKey, "message");
+          if (guard.error) return guard.error;
+        }
         const config = clinicId
           ? store.configForClinic(clinicId)
           : loadConnectConfig();
@@ -999,6 +1127,7 @@ export function registerConnectTools(server: McpServer): void {
       "Sets up consent, preferred language, and emergency contacts.",
     {
       clinicId: z.string().describe("Clinic ID to register the patient under (required)"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
       name: z.string().describe("Patient full name"),
       phone: z.string().describe("Patient phone number in E.164 format"),
       language: z
@@ -1012,8 +1141,11 @@ export function registerConnectTools(server: McpServer): void {
           "JSON array of emergency contacts: [{name, phone, relationship}]"
         ),
     },
-    async ({ clinicId, name, phone, language, emergencyContacts }) => {
+    async ({ clinicId, apiKey, name, phone, language, emergencyContacts }) => {
       try {
+        const guard = guardToolCall("meshcue-connect-register", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
         const clinic = store.requireClinic(clinicId);
         const config = store.configForClinic(clinicId);
         const patientId = randomUUID();
@@ -1161,10 +1293,14 @@ export function registerConnectTools(server: McpServer): void {
         .string()
         .optional()
         .describe("Optional clinic ID to show per-clinic status"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
     },
-    async ({ clinicId }) => {
+    async ({ clinicId, apiKey }) => {
       try {
         if (clinicId) {
+          const guard = guardToolCall("meshcue-connect-status", clinicId, apiKey);
+          if (guard.error) return guard.error;
+
           // Per-clinic status
           const clinic = store.requireClinic(clinicId);
 
@@ -1227,6 +1363,100 @@ export function registerConnectTools(server: McpServer): void {
         });
       } catch (e) {
         return err(`Status error: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  );
+
+  // ═══════════════════════════════════════════════════════════════
+  // AUTH & AUDIT TOOLS
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── meshcue-clinic-rotate-key ────────────────────────────────
+  server.tool(
+    "meshcue-clinic-rotate-key",
+    "Rotate a clinic's API key. Requires the current API key for authentication. " +
+      "Returns a new key and invalidates the old one.",
+    {
+      clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().describe("Current MeshCue API key (required for key rotation)"),
+    },
+    async ({ clinicId, apiKey }) => {
+      try {
+        // Must authenticate with the current key
+        const validation = auth.validateApiKey(apiKey);
+        if (!validation.valid || validation.clinicId !== clinicId) {
+          auditLogger.log({
+            id: randomUUID(),
+            timestamp: nowISO(),
+            clinicId,
+            action: "key_rotation_failed",
+            tool: "meshcue-clinic-rotate-key",
+            success: false,
+            apiKeyUsed: true,
+            metadata: { reason: "Invalid or mismatched API key" },
+          });
+          return err("Invalid API key. You must provide the current valid API key to rotate it.");
+        }
+
+        // Generate new key (automatically revokes old one)
+        const newKey = auth.generateApiKey(clinicId);
+
+        auditLogger.log({
+          id: randomUUID(),
+          timestamp: nowISO(),
+          clinicId,
+          action: "key_rotated",
+          tool: "meshcue-clinic-rotate-key",
+          success: true,
+          apiKeyUsed: true,
+        });
+
+        return ok({
+          clinicId,
+          apiKey: newKey,
+          message: "API key rotated successfully. The old key is now invalid. Store the new key securely.",
+        });
+      } catch (e) {
+        return err(`Key rotation error: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  );
+
+  // ── meshcue-clinic-audit-log ─────────────────────────────────
+  server.tool(
+    "meshcue-clinic-audit-log",
+    "View the audit trail for a clinic. Shows tool calls, auth failures, " +
+      "and rate limit events.",
+    {
+      clinicId: z.string().describe("Clinic ID"),
+      apiKey: z.string().optional().describe("MeshCue API key for authentication (mq_live_...)"),
+      limit: z
+        .number()
+        .optional()
+        .describe("Max number of entries to return. Default: 50"),
+      since: z
+        .string()
+        .optional()
+        .describe("ISO 8601 timestamp to filter entries from. e.g. '2026-03-26T00:00:00Z'"),
+    },
+    async ({ clinicId, apiKey, limit, since }) => {
+      try {
+        const guard = guardToolCall("meshcue-clinic-audit-log", clinicId, apiKey);
+        if (guard.error) return guard.error;
+
+        const entries = auditLogger.getAuditLog(clinicId, {
+          limit: limit ?? 50,
+          since,
+        });
+
+        return ok({
+          clinicId,
+          entries,
+          total: entries.length,
+          warning: guard.warning,
+        });
+      } catch (e) {
+        return err(`Audit log error: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   );

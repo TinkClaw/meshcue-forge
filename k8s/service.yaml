@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge
+  namespace: meshcue
+  labels:
+    app: forge
+    app.kubernetes.io/name: forge
+    app.kubernetes.io/part-of: meshcue
+spec:
+  type: ClusterIP
+  selector:
+    app: forge
+  ports:
+    - name: mcp
+      port: 3000
+      targetPort: mcp
+      protocol: TCP
+    - name: health
+      port: 8080
+      targetPort: health
+      protocol: TCP

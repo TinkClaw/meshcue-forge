@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  forge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meshcue-forge
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - FORGE_DATA_DIR=/app/data
+      - ZOO_CAD_API_KEY=${ZOO_CAD_API_KEY:-}
+      - ZOO_CAD_ENDPOINT=${ZOO_CAD_ENDPOINT:-https://api.zoo.dev}
+      - LLAMA_MESH_ENDPOINT=${LLAMA_MESH_ENDPOINT:-}
+      - HUNYUAN3D_ENDPOINT=${HUNYUAN3D_ENDPOINT:-}
+      - COSMOS_ENDPOINT=${COSMOS_ENDPOINT:-}
+      - PYTHON_PATH=${PYTHON_PATH:-python3}
+      - FORGE_ENCLOSURE_BACKEND=${FORGE_ENCLOSURE_BACKEND:-openscad}
+      - FORGE_PCB_BACKEND=${FORGE_PCB_BACKEND:-skidl}
+      - FORGE_VIZ_BACKEND=${FORGE_VIZ_BACKEND:-hunyuan3d}
+      - FORGE_ENABLE_GPU=${FORGE_ENABLE_GPU:-false}
+      - MESH_ENDPOINT=${MESH_ENDPOINT:-ws://host.docker.internal:9871}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://forge:forge@postgres:5432/meshcue
+    volumes:
+      - forge_data:/app/data
+    networks:
+      - meshcue-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: meshcue-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=forge
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-forge}
+      - POSTGRES_DB=meshcue
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - meshcue-net
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d meshcue"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: meshcue-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - meshcue-net
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  forge_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  meshcue-net:
+    driver: bridge

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: forge-config
+  namespace: meshcue
+  labels:
+    app: forge
+    app.kubernetes.io/name: forge
+    app.kubernetes.io/part-of: meshcue
+data:
+  NODE_ENV: "production"
+  FORGE_DATA_DIR: "/app/data"
+  ZOO_CAD_ENDPOINT: "https://api.zoo.dev"
+  PYTHON_PATH: "python3"
+  FORGE_ENCLOSURE_BACKEND: "openscad"
+  FORGE_PCB_BACKEND: "skidl"
+  FORGE_VIZ_BACKEND: "hunyuan3d"
+  FORGE_ENABLE_GPU: "false"
+  MESH_ENDPOINT: "ws://meshcue-core.meshcue.svc.cluster.local:9871"
+  REDIS_URL: "redis://redis.meshcue.svc.cluster.local:6379"
+  DATABASE_URL: "postgresql://forge:forge@postgres.meshcue.svc.cluster.local:5432/meshcue"

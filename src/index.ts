@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * MeshCue Forge + Connect MCP Server
+ * MeshCue Forge + Connect + RAM MCP Server
  *
  * The hardware compiler — describe it, build it, print it.
  * Plus patient messaging — alerts, triage, and multi-channel delivery.
+ * Plus resource & asset management — track devices, stock, and supply chains.
  *
  * Forge tools:
  *   1. meshforge-describe  — natural language → MHDL spec
@@ -19,6 +20,16 @@
  *   8. meshcue-connect-register — register patient for Connect messaging
  *   9. meshcue-connect-inbox    — process incoming patient message
  *  10. meshcue-connect-status   — check channel availability and queue
+ *
+ * RAM tools:
+ *  11. meshcue-ram-register-asset — add device/equipment to asset tracking
+ *  12. meshcue-ram-update-asset   — update status, location, assignment
+ *  13. meshcue-ram-inventory      — list/search assets and stock
+ *  14. meshcue-ram-restock        — add stock for consumables/medications
+ *  15. meshcue-ram-order          — create/update supply orders
+ *  16. meshcue-ram-maintenance    — log maintenance records
+ *  17. meshcue-ram-alerts         — low stock, expiring, maintenance due alerts
+ *  18. meshcue-ram-dashboard      — clinic resource summary
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -31,6 +42,7 @@ import { validate } from "./schema/validate.js";
 import { loadConfig, detectCapabilities } from "./config.js";
 import type { MHDLDocument } from "./schema/mhdl.js";
 import { registerConnectTools } from "./connect/mcp.js";
+import { registerRAMTools } from "./ram/mcp.js";
 
 // ─── Server Setup ────────────────────────────────────────────
 
@@ -405,6 +417,10 @@ server.tool(
 
 registerConnectTools(server);
 
+// ─── RAM Tools ───────────────────────────────────────────────
+
+registerRAMTools(server);
+
 // ─── Utility: Deep Merge ─────────────────────────────────────
 
 function deepMerge(target: unknown, source: unknown): unknown {
@@ -449,7 +465,7 @@ function deepMerge(target: unknown, source: unknown): unknown {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MeshCue Forge + Connect MCP server running — forge.meshcue.com");
+  console.error("MeshCue Forge + Connect + RAM MCP server running — forge.meshcue.com");
 }
 
 main().catch((err) => {

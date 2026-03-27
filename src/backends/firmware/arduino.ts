@@ -1165,6 +1165,28 @@ function generateColorSensorCode(comp: Component): CodeBlock {
   };
 }
 
+// ─── Pin Finder Helper ──────────────────────────────────────
+
+/**
+ * Generate a C helper function that finds a component's pin at runtime.
+ * Since this is a code generator, we resolve pins at generation time
+ * and emit the correct pin references directly.
+ */
+function findComponentPin(
+  components: Component[],
+  type: string,
+  pinId: string,
+): { pinName: string; gpio: number | undefined } | undefined {
+  const comp = components.find((c) => c.type === type);
+  if (!comp) return undefined;
+  const pin = comp.pins.find((p) => p.id === pinId);
+  if (!pin) return undefined;
+  return {
+    pinName: `PIN_${comp.id.toUpperCase()}_${pin.id.toUpperCase()}`,
+    gpio: pin.gpio,
+  };
+}
+
 // ─── Medical Calibration Code Generation ────────────────────
 
 /** Set of component types that participate in medical calibration */
@@ -1184,6 +1206,7 @@ const MEDICAL_CALIBRATABLE_TYPES = new Set([
  */
 function generateCalibrationManagerCode(
   calibratableTypes: Set<string>,
+  components: Component[] = [],
 ): CodeBlock {
   const includes = ["EEPROM.h"];
   const globals: string[] = [
@@ -1268,37 +1291,67 @@ function generateCalibrationManagerCode(
 
   // ── SpO2 calibration ──
   if (calibratableTypes.has("pulse_oximeter")) {
+    // Find the pulse oximeter component to get its variable name
+    const spo2Comp = components.find((c) => c.type === "pulse_oximeter");
+    const spo2Id = spo2Comp?.id || "spo2";
+
     functions.push(
       `void calibrateSpo2() {`,
       `  display_text("SpO2 CALIBRATION", "Place finger...");`,
       `  Serial.println(F("SpO2 calibration: place finger on sensor"));`,
-      `  Serial.println(F("Enter known SpO2 reference value (e.g. 97):"));`,
+      `  Serial.println(F("Enter known SpO2 reference via Serial (e.g. 97):"));`,
       `  delay(2000);`,
       ``,
-      `  // Collect raw IR/Red for 30 seconds`,
+      `  // Collect raw IR/Red from MAX30102 via I2C for 30 seconds`,
       `  float irSum = 0, redSum = 0;`,
       `  int samples = 0;`,
       `  unsigned long calStart = millis();`,
       `  display_text("SpO2 CALIBRATE", "Reading 30s...");`,
       `  while (millis() - calStart < 30000) {`,
-      `    // Read raw values from sensor (assumes sensor object exists)`,
-      `    // Accumulate IR and Red channel values`,
-      `    irSum += 50000; // placeholder — replace with actual sensor read`,
-      `    redSum += 45000;`,
-      `    samples++;`,
+      `    // Read raw IR and Red LED values via MAX30105 library (I2C)`,
+      `    while (!${spo2Id}_sensor.available()) ${spo2Id}_sensor.check();`,
+      `    uint32_t irVal = ${spo2Id}_sensor.getIR();`,
+      `    uint32_t redVal = ${spo2Id}_sensor.getRed();`,
+      `    ${spo2Id}_sensor.nextSample();`,
+      `    if (irVal > 5000) { // finger present check`,
+      `      irSum += (float)irVal;`,
+      `      redSum += (float)redVal;`,
+      `      samples++;`,
+      `    }`,
       `    delay(10);`,
       `  }`,
       ``,
+      `  if (samples < 100) {`,
+      `    display_text("SpO2 FAILED", "No finger?");`,
+      `    Serial.println(F("SpO2 calibration failed: insufficient samples. Ensure finger is on sensor."));`,
+      `    delay(3000);`,
+      `    return;`,
+      `  }`,
+      ``,
       `  float avgRatio = (redSum / samples) / (irSum / samples);`,
-      `  // Default SpO2 lookup: SpO2 = 110 - 25 * ratio`,
-      `  // Reference calibration: adjust offset so computed matches known value`,
+      `  // Default SpO2 lookup: SpO2 = 110 - 25 * ratio (Beer-Lambert approximation)`,
       `  float computedSpo2 = 110.0 - 25.0 * avgRatio;`,
-      `  float referenceSpo2 = 97.0; // TODO: read from serial or button input`,
+      ``,
+      `  // Read reference SpO2 from Serial if available, else use 97%`,
+      `  float referenceSpo2 = 97.0;`,
+      `  Serial.println(F("Waiting 10s for Serial reference value..."));`,
+      `  unsigned long waitStart = millis();`,
+      `  while (millis() - waitStart < 10000) {`,
+      `    if (Serial.available()) {`,
+      `      referenceSpo2 = Serial.parseFloat();`,
+      `      if (referenceSpo2 < 70.0 || referenceSpo2 > 100.0) referenceSpo2 = 97.0;`,
+      `      Serial.print(F("Reference SpO2 set to: ")); Serial.println(referenceSpo2);`,
+      `      break;`,
+      `    }`,
+      `    delay(100);`,
+      `  }`,
+      ``,
       `  calibData.spo2Offset = referenceSpo2 - computedSpo2;`,
-      `  calibData.spo2Gain = 1.0;`,
+      `  calibData.spo2Gain = referenceSpo2 / max(computedSpo2, 0.01f);`,
       ``,
       `  display_text("SpO2 CALIBRATED", "Offset saved");`,
       `  Serial.print(F("SpO2 offset: ")); Serial.println(calibData.spo2Offset);`,
+      `  Serial.print(F("SpO2 gain: ")); Serial.println(calibData.spo2Gain, 4);`,
       `  delay(2000);`,
       `}`,
       ``,
@@ -1307,18 +1360,24 @@ function generateCalibrationManagerCode(
 
   // ── ECG calibration ──
   if (calibratableTypes.has("ecg")) {
+    // Find the ECG component and its OUTPUT analog pin
+    const ecgPin = findComponentPin(components, "ecg", "output")
+      || findComponentPin(components, "ecg", "out")
+      || findComponentPin(components, "ecg", "sig");
+    const ecgPinRef = ecgPin?.pinName || `PIN_${(components.find(c => c.type === "ecg")?.id || "ecg").toUpperCase()}_OUTPUT`;
+
     functions.push(
       `void calibrateECG() {`,
       `  display_text("ECG CALIBRATION", "Rest 10s...");`,
       `  Serial.println(F("ECG calibration: remain still for baseline"));`,
       `  delay(2000);`,
       ``,
-      `  // Record resting baseline for 10 seconds`,
+      `  // Record resting baseline for 10 seconds using AD8232 OUTPUT pin`,
       `  float baselineSum = 0;`,
       `  int samples = 0;`,
       `  unsigned long calStart = millis();`,
       `  while (millis() - calStart < 10000) {`,
-      `    baselineSum += analogRead(A0); // TODO: use actual ECG pin`,
+      `    baselineSum += analogRead(${ecgPinRef}); // AD8232 analog output`,
       `    samples++;`,
       `    delay(2);`,
       `  }`,
@@ -1334,7 +1393,7 @@ function generateCalibrationManagerCode(
       `  samples = 0;`,
       `  calStart = millis();`,
       `  while (millis() - calStart < 5000) {`,
-      `    signalSum += analogRead(A0);`,
+      `    signalSum += analogRead(${ecgPinRef});`,
       `    samples++;`,
       `    delay(2);`,
       `  }`,
@@ -1358,6 +1417,28 @@ function generateCalibrationManagerCode(
 
   // ── Temperature calibration ──
   if (calibratableTypes.has("temperature_sensor")) {
+    // Find the temperature sensor component to determine read method
+    const tempComp = components.find((c) => c.type === "temperature_sensor");
+    const tempId = tempComp?.id || "temp";
+    const tempModel = (tempComp?.model || "").toLowerCase();
+    const isDS18B20 = tempModel.includes("ds18b20") || tempModel.includes("onewire");
+    const isAnalogNTC = !isDS18B20 && !tempModel.includes("dht");
+
+    // For analog NTC, find the analog pin
+    const tempAnalogPin = isAnalogNTC
+      ? findComponentPin(components, "temperature_sensor", "sig")
+        || findComponentPin(components, "temperature_sensor", "out")
+        || findComponentPin(components, "temperature_sensor", "data")
+      : undefined;
+    const tempAnalogPinRef = tempAnalogPin?.pinName || `PIN_${tempId.toUpperCase()}_SIG`;
+
+    // Choose the correct read expression based on sensor type
+    const tempReadExpr = isDS18B20
+      ? `${tempId}_sensors.requestTemperatures(); float reading = ${tempId}_sensors.getTempCByIndex(0);`
+      : isAnalogNTC
+        ? `int raw = analogRead(${tempAnalogPinRef}); float resistance = 10000.0 * raw / (1023.0 - raw); float reading = 1.0 / (log(resistance / 10000.0) / 3950.0 + 1.0 / 298.15) - 273.15;`
+        : `${tempId}_dht.readTemperature(); float reading = ${tempId}_tempC;`;
+
     functions.push(
       `void calibrateTemp() {`,
       `  display_text("TEMP CALIBRATE", "Ice-point (0C)");`,
@@ -1365,16 +1446,16 @@ function generateCalibrationManagerCode(
       `  Serial.println(F("Press button when ready..."));`,
       `  delay(10000); // wait for user`,
       ``,
-      `  // Read ice-point reference`,
+      `  // Read ice-point reference using actual temperature sensor`,
       `  float iceSum = 0;`,
       `  int samples = 0;`,
       `  unsigned long calStart = millis();`,
       `  while (millis() - calStart < 10000) {`,
-      `    iceSum += analogRead(A0); // TODO: use actual temp sensor read`,
-      `    samples++;`,
+      `    ${tempReadExpr}`,
+      `    if (!isnan(reading)) { iceSum += reading; samples++; }`,
       `    delay(100);`,
       `  }`,
-      `  float iceRaw = iceSum / samples;`,
+      `  float iceRaw = (samples > 0) ? iceSum / samples : 0;`,
       ``,
       `  display_text("TEMP CALIBRATE", "Body temp ref");`,
       `  Serial.println(F("Now place sensor at known body temperature (e.g. 37C)"));`,
@@ -1384,11 +1465,11 @@ function generateCalibrationManagerCode(
       `  samples = 0;`,
       `  calStart = millis();`,
       `  while (millis() - calStart < 10000) {`,
-      `    bodySum += analogRead(A0);`,
-      `    samples++;`,
+      `    ${tempReadExpr}`,
+      `    if (!isnan(reading)) { bodySum += reading; samples++; }`,
       `    delay(100);`,
       `  }`,
-      `  float bodyRaw = bodySum / samples;`,
+      `  float bodyRaw = (samples > 0) ? bodySum / samples : 37.0;`,
       ``,
       `  // Two-point linear correction: corrected = raw * gain + offset`,
       `  // Point 1: raw=iceRaw, actual=0; Point 2: raw=bodyRaw, actual=37`,
@@ -1411,22 +1492,28 @@ function generateCalibrationManagerCode(
 
   // ── Blood pressure calibration ──
   if (calibratableTypes.has("blood_pressure")) {
+    // Find the blood pressure component's analog pin
+    const bpPin = findComponentPin(components, "blood_pressure", "sig")
+      || findComponentPin(components, "blood_pressure", "out")
+      || findComponentPin(components, "blood_pressure", "output");
+    const bpPinRef = bpPin?.pinName || `PIN_${(components.find(c => c.type === "blood_pressure")?.id || "bp").toUpperCase()}_SIG`;
+
     functions.push(
       `void calibratePressure() {`,
       `  display_text("BP CALIBRATE", "Open to air");`,
       `  Serial.println(F("Blood pressure calibration: ensure cuff is deflated / sensor open to air"));`,
       `  delay(5000);`,
       ``,
-      `  // Zero-point calibration at atmospheric pressure`,
+      `  // Zero-point calibration at atmospheric pressure using actual pressure pin`,
       `  float zeroSum = 0;`,
       `  int samples = 0;`,
       `  unsigned long calStart = millis();`,
       `  while (millis() - calStart < 5000) {`,
-      `    zeroSum += analogRead(A0); // TODO: use actual pressure pin`,
+      `    zeroSum += analogRead(${bpPinRef}); // Pressure transducer analog pin`,
       `    samples++;`,
       `    delay(10);`,
       `  }`,
-      `  calibData.pressureZero = zeroSum / samples;`,
+      `  calibData.pressureZero = (samples > 0) ? zeroSum / samples : 0;`,
       ``,
       `  display_text("BP: ref check", "Use sphygmo...");`,
       `  Serial.println(F("Optional: inflate to known pressure from mercury sphygmomanometer"));`,
@@ -1443,41 +1530,33 @@ function generateCalibrationManagerCode(
 
   // ── Load cell calibration ──
   if (calibratableTypes.has("load_cell")) {
+    // Find the load cell component to use its HX711 scale object
+    const lcComp = components.find((c) => c.type === "load_cell");
+    const lcId = lcComp?.id || "scale";
+
     functions.push(
       `void calibrateWeight() {`,
       `  display_text("WEIGHT CALIBRATE", "Remove all load");`,
       `  Serial.println(F("Weight calibration: remove all weight from scale"));`,
       `  delay(5000);`,
       ``,
-      `  // Tare — zero with no load`,
-      `  float tareSum = 0;`,
-      `  int samples = 0;`,
-      `  unsigned long calStart = millis();`,
-      `  while (millis() - calStart < 5000) {`,
-      `    tareSum += analogRead(A0); // TODO: use actual HX711 read`,
-      `    samples++;`,
-      `    delay(10);`,
-      `  }`,
-      `  calibData.weightTare = tareSum / samples;`,
+      `  // Tare — zero with no load using HX711 read_average`,
+      `  ${lcId}_scale.set_scale(); // reset scale factor`,
+      `  float tareValue = ${lcId}_scale.read_average(20); // average of 20 readings`,
+      `  calibData.weightTare = tareValue;`,
+      `  ${lcId}_scale.tare(20); // tare with 20 readings`,
       ``,
       `  // Span calibration with known weight`,
       `  display_text("WEIGHT CALIBRATE", "Place known wt");`,
       `  Serial.println(F("Place a known weight on the scale (e.g. 1000g)"));`,
       `  delay(10000);`,
       ``,
-      `  float loadSum = 0;`,
-      `  samples = 0;`,
-      `  calStart = millis();`,
-      `  while (millis() - calStart < 5000) {`,
-      `    loadSum += analogRead(A0);`,
-      `    samples++;`,
-      `    delay(10);`,
-      `  }`,
-      `  float loadRaw = loadSum / samples;`,
+      `  float loadRaw = ${lcId}_scale.read_average(20); // average of 20 readings with load`,
       `  float knownWeight = 1000.0; // grams — adjust as needed`,
       ``,
       `  if (abs(loadRaw - calibData.weightTare) > 0.001) {`,
       `    calibData.weightScale = knownWeight / (loadRaw - calibData.weightTare);`,
+      `    ${lcId}_scale.set_scale(calibData.weightScale); // apply computed scale factor`,
       `  } else {`,
       `    calibData.weightScale = 1.0;`,
       `  }`,
@@ -1493,28 +1572,44 @@ function generateCalibrationManagerCode(
 
   // ── Color sensor calibration ──
   if (calibratableTypes.has("color_sensor")) {
+    // Find the color sensor component to use its TCS34725 object
+    const csComp = components.find((c) => c.type === "color_sensor");
+    const csId = csComp?.id || "color";
+
     functions.push(
       `void calibrateColor() {`,
       `  display_text("COLOR CALIBRATE", "Place white card");`,
       `  Serial.println(F("Color calibration: place reference white card under sensor"));`,
       `  delay(5000);`,
       ``,
-      `  // White balance — read RGB against known white`,
+      `  // White balance — read RGBC from TCS34725 via I2C`,
       `  float rSum = 0, gSum = 0, bSum = 0;`,
       `  int samples = 0;`,
       `  unsigned long calStart = millis();`,
       `  while (millis() - calStart < 5000) {`,
-      `    // TODO: use actual TCS34725 raw reads`,
-      `    rSum += 200; gSum += 200; bSum += 200; // placeholder`,
-      `    samples++;`,
+      `    uint16_t r_raw, g_raw, b_raw, c_raw;`,
+      `    ${csId}_tcs.getRawData(&r_raw, &g_raw, &b_raw, &c_raw);`,
+      `    if (c_raw > 0) { // valid reading check`,
+      `      rSum += (float)r_raw;`,
+      `      gSum += (float)g_raw;`,
+      `      bSum += (float)b_raw;`,
+      `      samples++;`,
+      `    }`,
       `    delay(50);`,
+      `  }`,
+      ``,
+      `  if (samples == 0) {`,
+      `    display_text("COLOR FAILED", "No readings");`,
+      `    Serial.println(F("Color calibration failed: no valid readings"));`,
+      `    delay(3000);`,
+      `    return;`,
       `  }`,
       ``,
       `  float rAvg = rSum / samples;`,
       `  float gAvg = gSum / samples;`,
       `  float bAvg = bSum / samples;`,
       ``,
-      `  // Correction factors: target = 255 (white)`,
+      `  // Correction factors: target = 255 (white reference)`,
       `  if (rAvg > 0) calibData.colorR = 255.0 / rAvg;`,
       `  if (gAvg > 0) calibData.colorG = 255.0 / gAvg;`,
       `  if (bAvg > 0) calibData.colorB = 255.0 / bAvg;`,
@@ -1775,7 +1870,7 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
       }
     }
     if (calibratablePresent.size > 0) {
-      blocks.push(generateCalibrationManagerCode(calibratablePresent));
+      blocks.push(generateCalibrationManagerCode(calibratablePresent, doc.board.components));
     }
   }
 
@@ -1892,10 +1987,48 @@ export function generateArduinoFirmware(doc: MHDLDocument): BuildArtifact[] {
     }
   }
   lines.push(``);
-  lines.push(`  // Periodic update`);
+  lines.push(`  // Periodic update — sensor reporting & alert checks`);
   lines.push(`  if (millis() - lastUpdate >= UPDATE_INTERVAL) {`);
   lines.push(`    lastUpdate = millis();`);
-  lines.push(`    // TODO: Add your periodic logic here`);
+
+  // Generate periodic sensor reads and serial output for each component
+  for (const comp of doc.board.components) {
+    switch (comp.type) {
+      case "pulse_oximeter":
+        lines.push(`    Serial.print(F("SpO2: ")); Serial.print(${comp.id}_spo2);`);
+        lines.push(`    Serial.print(F("% HR: ")); Serial.println(${comp.id}_heartRate);`);
+        break;
+      case "ecg":
+        lines.push(`    if (!${comp.id}_leadsOff) {`);
+        lines.push(`      Serial.print(F("ECG: ")); Serial.println(${comp.id}_value);`);
+        lines.push(`    } else {`);
+        lines.push(`      Serial.println(F("ECG: leads off"));`);
+        lines.push(`    }`);
+        break;
+      case "temperature_sensor":
+        lines.push(`    Serial.print(F("Temp: ")); Serial.print(${comp.id}_tempC); Serial.println(F("C"));`);
+        break;
+      case "blood_pressure":
+        lines.push(`    Serial.print(F("Pressure: ")); Serial.print(${comp.id}_mmHg); Serial.println(F(" mmHg"));`);
+        break;
+      case "load_cell":
+        lines.push(`    Serial.print(F("Weight: ")); Serial.print(${comp.id}_weight); Serial.println(F("g"));`);
+        break;
+      case "color_sensor":
+        lines.push(`    Serial.print(F("R:")); Serial.print(${comp.id}_r);`);
+        lines.push(`    Serial.print(F(" G:")); Serial.print(${comp.id}_g);`);
+        lines.push(`    Serial.print(F(" B:")); Serial.print(${comp.id}_b);`);
+        lines.push(`    Serial.print(F(" Lux:")); Serial.println(${comp.id}_lux);`);
+        break;
+    }
+  }
+
+  // If Connect is enabled, add periodic alert threshold checks
+  if (doc.firmware?.connectEnabled || doc.meta?.connectEnabled) {
+    lines.push(`    // MeshCue Connect periodic alert evaluation`);
+    lines.push(`    // (threshold checks are in the main loop above)`);
+  }
+
   lines.push(`  }`);
   lines.push(``);
   lines.push(`  delay(10);`);

@@ -41,6 +41,11 @@ import { generateKiCadPCB } from "../backends/pcb/kicad.js";
 import { generateHunyuan3DModel } from "../backends/visualization/hunyuan3d.js";
 import { generateCosmosVideo } from "../backends/visualization/cosmos.js";
 
+// Mesh bridge
+import { MeshBridge, shouldUseMesh } from "../mesh/index.js";
+import type { BuildArtifacts as MeshBuildArtifacts } from "../mesh/index.js";
+import { checkPythonPackage } from "../python/bridge.js";
+
 // Medical regulatory docs
 import {
   generateWHOChecklist,
@@ -655,21 +660,123 @@ export interface BuildProgress {
 
 export type ProgressCallback = (progress: BuildProgress) => void;
 
+// ─── Build Options ───────────────────────────────────────────
+
+export interface BuildOptions {
+  stages?: BuildStage[];
+  config?: ForgeConfig;
+  onProgress?: ProgressCallback;
+  /** Enable mesh network offloading. Default: false (local build). */
+  useMesh?: boolean;
+  /** Override mesh endpoint (default: ws://localhost:9871) */
+  meshEndpoint?: string;
+}
+
+// ─── Mesh Build Helper ──────────────────────────────────────
+
+async function tryMeshBuild(
+  doc: MHDLDocument,
+  config: ForgeConfig,
+  meshEndpoint?: string,
+  emit?: ProgressCallback,
+): Promise<{ used: boolean; artifacts: BuildArtifact[] }> {
+  const bridge = new MeshBridge(meshEndpoint);
+  const emitFn = emit ?? (() => {});
+
+  try {
+    const localHasPython = await checkPythonPackage("cadquery", config.pythonPath).catch(() => false);
+
+    const decision = await shouldUseMesh(bridge, doc, {
+      localHasGpu: config.enableGpuBackends ?? false,
+      localHasPython,
+      meshEnabled: true,
+    });
+
+    if (!decision.useMesh) {
+      return { used: false, artifacts: [] };
+    }
+
+    emitFn({ stage: "validate", status: "starting", backend: `mesh:${decision.node?.id ?? "unknown"}` });
+
+    const job = await bridge.submitBuild(doc, {
+      preferGpu: !config.enableGpuBackends,
+      timeout: 120_000,
+    });
+
+    // Subscribe to progress events
+    const unsub = bridge.onProgress(job.jobId, (event) => {
+      emitFn({
+        stage: event.stage as BuildStageType | "validate",
+        status: event.status,
+        backend: `mesh:${job.nodeId}`,
+      });
+    });
+
+    // Poll for completion
+    let status = await bridge.getJobStatus(job.jobId);
+    const deadline = Date.now() + 120_000;
+    while (status.status === "queued" || status.status === "running") {
+      if (Date.now() > deadline) {
+        unsub();
+        bridge.disconnect();
+        return { used: false, artifacts: [] }; // Timeout — fall back to local
+      }
+      await new Promise((r) => setTimeout(r, 2_000));
+      status = await bridge.getJobStatus(job.jobId);
+    }
+
+    unsub();
+
+    if (status.status !== "completed") {
+      bridge.disconnect();
+      return { used: false, artifacts: [] }; // Failed — fall back to local
+    }
+
+    const result: MeshBuildArtifacts = await bridge.fetchArtifacts(job.jobId);
+    bridge.disconnect();
+
+    const mapped: BuildArtifact[] = result.artifacts.map((a) => ({
+      stage: a.stage as BuildStageType,
+      filename: a.filename,
+      content: a.content,
+      format: a.format,
+    }));
+
+    return { used: true, artifacts: mapped };
+  } catch {
+    bridge.disconnect();
+    return { used: false, artifacts: [] }; // Any error — fall back to local
+  }
+}
+
 // ─── Main Build Function ─────────────────────────────────────
 
 export async function build(
   doc: MHDLDocument,
-  stages: BuildStage[] = ["all"],
+  stages?: BuildStage[] | BuildOptions,
   configOverride?: ForgeConfig,
   onProgress?: ProgressCallback,
 ): Promise<BuildResult> {
+  // Support both old positional API and new options API
+  let options: BuildOptions;
+  if (stages && !Array.isArray(stages)) {
+    options = stages;
+  } else {
+    options = {
+      stages: (stages as BuildStage[] | undefined) ?? ["all"],
+      config: configOverride,
+      onProgress,
+    };
+  }
+
   const startTime = Date.now();
   const artifacts: BuildArtifact[] = [];
   const failedStages: FailedStage[] = [];
-  const emit = onProgress ?? (() => {});
+  const emit = options.onProgress ?? (() => {});
+  const buildStages = options.stages ?? ["all"];
 
   // Load config and detect capabilities
-  const config = configOverride ?? loadConfig();
+  const config = options.config ?? loadConfig();
   const registry = await detectCapabilities(config);
 
   // Always validate first
@@ -688,10 +795,25 @@ export async function build(
     };
   }
 
-  const buildAll = stages.includes("all");
+  // ── Mesh offloading (if enabled) ──────────────────────────
+  if (options.useMesh) {
+    const meshResult = await tryMeshBuild(doc, config, options.meshEndpoint, emit);
+    if (meshResult.used && meshResult.artifacts.length > 0) {
+      return {
+        success: true,
+        artifacts: meshResult.artifacts,
+        validation,
+        buildTime: Date.now() - startTime,
+        failedStages: [],
+      };
+    }
+    // Mesh unavailable or failed — fall through to local build
+  }
+
+  const buildAll = buildStages.includes("all");
 
   // Circuit (Wokwi — always available)
-  if (buildAll || stages.includes("circuit")) {
+  if (buildAll || buildStages.includes("circuit")) {
     emit({ stage: "circuit", status: "starting", backend: "wokwi" });
     const t = Date.now();
     artifacts.push(generateWokwiCircuit(doc));
@@ -699,7 +821,7 @@ export async function build(
   }
 
   // Firmware (Arduino or MicroPython)
-  if (buildAll || stages.includes("firmware")) {
+  if (buildAll || buildStages.includes("firmware")) {
     const fwBackend = doc.firmware.framework === "micropython" ? "micropython" : "arduino";
     emit({ stage: "firmware", status: "starting", backend: fwBackend });
     const t = Date.now();
@@ -712,7 +834,7 @@ export async function build(
   }
 
   // Enclosure (multi-backend)
-  if (buildAll || stages.includes("enclosure")) {
+  if (buildAll || buildStages.includes("enclosure")) {
     const backend = selectEnclosureBackend(doc, config, registry);
     emit({ stage: "enclosure", status: "starting", backend });
     const t = Date.now();
@@ -726,7 +848,7 @@ export async function build(
   }
 
   // PCB (multi-backend)
-  if (buildAll || stages.includes("pcb")) {
+  if (buildAll || buildStages.includes("pcb")) {
     const backend = selectPCBBackend(doc, config, registry);
     emit({ stage: "pcb", status: "starting", backend });
     const t = Date.now();
@@ -741,7 +863,7 @@ export async function build(
 
   // Visualization (multi-backend)
   if (
-    stages.includes("visualization") ||
+    buildStages.includes("visualization") ||
     (buildAll && (doc.visualization?.generate3DModel || doc.visualization?.generateVideo))
   ) {
     const backend = selectVizBackend(doc, config, registry);
@@ -757,7 +879,7 @@ export async function build(
   }
 
   // BOM
-  if (buildAll || stages.includes("bom")) {
+  if (buildAll || buildStages.includes("bom")) {
     emit({ stage: "bom", status: "starting" });
     const t = Date.now();
     const docLang = (doc.docs?.language || "en") as MedicalLanguage;
@@ -766,7 +888,7 @@ export async function build(
   }
 
   // Docs
-  if (buildAll || stages.includes("docs")) {
+  if (buildAll || buildStages.includes("docs")) {
     emit({ stage: "docs", status: "starting" });
     const t = Date.now();
     const docLang = (doc.docs?.language || "en") as MedicalLanguage;

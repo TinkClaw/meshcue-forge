@@ -141,6 +141,7 @@ export interface ConnectConfig {
   maxRetries: number;
   retryDelayMs: number;
   criticalEscalationPhone?: string; // fallback for critical alerts
+  channelPriority?: Channel[]; // fallback order for delivery attempts
 }
 
 // Consent log entry (for audit trail)
