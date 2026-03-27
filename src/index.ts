@@ -19,6 +19,7 @@ import { z } from "zod";
 import { describe } from "./tools/describe.js";
 import { build, type BuildStage } from "./tools/build.js";
 import { validate } from "./schema/validate.js";
+import { loadConfig, detectCapabilities } from "./config.js";
 import type { MHDLDocument } from "./schema/mhdl.js";
 
 // ─── Server Setup ────────────────────────────────────────────
@@ -95,7 +96,7 @@ server.tool(
       .describe("The MHDL document as a JSON string"),
     stages: z
       .array(
-        z.enum(["circuit", "firmware", "enclosure", "pcb", "bom", "docs", "all"])
+        z.enum(["circuit", "firmware", "enclosure", "pcb", "bom", "docs", "visualization", "all"])
       )
       .default(["all"])
       .describe("Which stages to build. Default: all"),
@@ -103,7 +104,7 @@ server.tool(
   async ({ mhdl, stages }) => {
     try {
       const doc: MHDLDocument = JSON.parse(mhdl);
-      const result = build(doc, stages as BuildStage[]);
+      const result = await build(doc, stages as BuildStage[]);
 
       if (!result.success) {
         return {
@@ -242,7 +243,7 @@ server.tool(
       ),
     stages: z
       .array(
-        z.enum(["circuit", "firmware", "enclosure", "pcb", "bom", "docs", "all"])
+        z.enum(["circuit", "firmware", "enclosure", "pcb", "bom", "docs", "visualization", "all"])
       )
       .default(["all"])
       .describe("Which stages to rebuild after patching"),
@@ -281,7 +282,7 @@ server.tool(
       }
 
       // Rebuild
-      const result = build(patched, stages as BuildStage[]);
+      const result = await build(patched, stages as BuildStage[]);
 
       const files: Record<string, string> = {};
       for (const artifact of result.artifacts) {
@@ -323,6 +324,41 @@ server.tool(
       };
     }
   }
+);
+
+// ─── Tool: meshforge-capabilities ─────────────────────────────
+
+server.tool(
+  "meshforge-capabilities",
+  "Detect which backends are available based on the current environment. " +
+    "Returns per-stage backend availability (enclosure, PCB, visualization) " +
+    "with reasons for any unavailable backends.",
+  {},
+  async () => {
+    const config = loadConfig();
+    const registry = detectCapabilities(config);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            {
+              backends: registry,
+              defaults: {
+                enclosure: config.defaultEnclosureBackend || "openscad",
+                pcb: config.defaultPCBBackend || "skidl",
+                visualization: config.defaultVisualizationBackend || "hunyuan3d",
+              },
+              gpu: config.enableGpuBackends ?? false,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
 );
 
 // ─── Utility: Deep Merge ─────────────────────────────────────

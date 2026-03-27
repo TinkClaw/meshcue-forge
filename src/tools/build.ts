@@ -2,18 +2,52 @@
  * meshforge-build
  *
  * Takes an MHDL document and generates all build artifacts:
- * circuit, firmware, enclosure, and docs.
+ * circuit, firmware, enclosure, PCB, visualization, BOM, and docs.
+ *
+ * Uses the backend registry to select the best available backend
+ * for each stage based on user preferences and detected capabilities.
  */
 
-import type { MHDLDocument, BuildArtifact, BuildResult } from "../schema/mhdl.js";
+import type {
+  MHDLDocument,
+  BuildArtifact,
+  BuildResult,
+  ForgeConfig,
+  EnclosureBackend,
+  PCBBackend,
+  VisualizationBackend,
+} from "../schema/mhdl.js";
 import { validate } from "../schema/validate.js";
+import { loadConfig, detectCapabilities, type BackendRegistry } from "../config.js";
+
+// Circuit + Firmware (always available)
 import { generateWokwiCircuit } from "../backends/circuit/wokwi.js";
 import { generateArduinoFirmware } from "../backends/firmware/arduino.js";
+
+// Enclosure backends
 import { generateOpenSCADEnclosure } from "../backends/enclosure/openscad.js";
+import { generateCadQueryEnclosure } from "../backends/enclosure/cadquery.js";
+import { generateZooCadEnclosure } from "../backends/enclosure/zoo-cad.js";
+import { generateLlamaMeshEnclosure } from "../backends/enclosure/llama-mesh.js";
+
+// PCB backends
+import { generateSKiDLScript } from "../backends/pcb/skidl.js";
+
+// Visualization backends
+import { generateHunyuan3DModel } from "../backends/visualization/hunyuan3d.js";
+import { generateCosmosVideo } from "../backends/visualization/cosmos.js";
 
 // ─── Stage Types ─────────────────────────────────────────────
 
-export type BuildStage = "circuit" | "firmware" | "enclosure" | "pcb" | "bom" | "docs" | "all";
+export type BuildStage =
+  | "circuit"
+  | "firmware"
+  | "enclosure"
+  | "pcb"
+  | "bom"
+  | "docs"
+  | "visualization"
+  | "all";
 
 // ─── Documentation Generator ────────────────────────────────
 
@@ -179,19 +213,115 @@ function generateBOM(doc: MHDLDocument): BuildArtifact {
   };
 }
 
+// ─── Backend Selection ──────────────────────────────────────
+
+function selectEnclosureBackend(
+  doc: MHDLDocument,
+  config: ForgeConfig,
+  registry: BackendRegistry,
+): EnclosureBackend {
+  // Explicit choice in MHDL or config
+  const preferred = doc.enclosure.backend || config.defaultEnclosureBackend || "openscad";
+  if (registry.enclosure[preferred]?.available) return preferred;
+
+  // Fallback chain: cadquery → openscad (always available)
+  if (registry.enclosure.cadquery.available) return "cadquery";
+  return "openscad";
+}
+
+function selectPCBBackend(
+  doc: MHDLDocument,
+  config: ForgeConfig,
+  registry: BackendRegistry,
+): PCBBackend {
+  const preferred = doc.pcb?.backend || config.defaultPCBBackend || "skidl";
+  if (registry.pcb[preferred]?.available) return preferred;
+  return "skidl"; // always available (script generation)
+}
+
+function selectVizBackend(
+  doc: MHDLDocument,
+  config: ForgeConfig,
+  registry: BackendRegistry,
+): VisualizationBackend {
+  const preferred = doc.visualization?.backend || config.defaultVisualizationBackend || "hunyuan3d";
+  if (registry.visualization[preferred]?.available) return preferred;
+
+  // Fallback chain
+  for (const b of ["hunyuan3d", "llama-mesh", "cosmos"] as VisualizationBackend[]) {
+    if (registry.visualization[b].available) return b;
+  }
+  return "hunyuan3d"; // will generate prompt even if endpoint isn't set
+}
+
+// ─── Enclosure Dispatch ─────────────────────────────────────
+
+async function buildEnclosure(
+  doc: MHDLDocument,
+  backend: EnclosureBackend,
+  config: ForgeConfig,
+): Promise<BuildArtifact[]> {
+  switch (backend) {
+    case "cadquery":
+      return generateCadQueryEnclosure(doc);
+    case "zoo-cad":
+      return generateZooCadEnclosure(doc, config);
+    case "llama-mesh":
+      return generateLlamaMeshEnclosure(doc, config);
+    case "openscad":
+    default:
+      return generateOpenSCADEnclosure(doc);
+  }
+}
+
+// ─── PCB Dispatch ───────────────────────────────────────────
+
+function buildPCB(doc: MHDLDocument, backend: PCBBackend): BuildArtifact[] {
+  switch (backend) {
+    case "kicad":
+      // KiCad IPC requires local install — fall through to SKiDL netlist
+      return generateSKiDLScript(doc);
+    case "skidl":
+    default:
+      return generateSKiDLScript(doc);
+  }
+}
+
+// ─── Visualization Dispatch ─────────────────────────────────
+
+async function buildVisualization(
+  doc: MHDLDocument,
+  backend: VisualizationBackend,
+  config: ForgeConfig,
+): Promise<BuildArtifact[]> {
+  switch (backend) {
+    case "cosmos":
+      return generateCosmosVideo(doc, config);
+    case "llama-mesh":
+      return generateLlamaMeshEnclosure(doc, config);
+    case "hunyuan3d":
+    default:
+      return generateHunyuan3DModel(doc, config);
+  }
+}
+
 // ─── Main Build Function ─────────────────────────────────────
 
-export function build(
+export async function build(
   doc: MHDLDocument,
-  stages: BuildStage[] = ["all"]
-): BuildResult {
+  stages: BuildStage[] = ["all"],
+  configOverride?: ForgeConfig,
+): Promise<BuildResult> {
   const startTime = Date.now();
   const artifacts: BuildArtifact[] = [];
+
+  // Load config and detect capabilities
+  const config = configOverride ?? loadConfig();
+  const registry = detectCapabilities(config);
 
   // Always validate first
   const validation = validate(doc);
 
-  // If there are errors, return early
   if (!validation.valid) {
     return {
       success: false,
@@ -203,19 +333,35 @@ export function build(
 
   const buildAll = stages.includes("all");
 
-  // Circuit
+  // Circuit (Wokwi — always available)
   if (buildAll || stages.includes("circuit")) {
     artifacts.push(generateWokwiCircuit(doc));
   }
 
-  // Firmware
+  // Firmware (Arduino — always available)
   if (buildAll || stages.includes("firmware")) {
     artifacts.push(...generateArduinoFirmware(doc));
   }
 
-  // Enclosure
+  // Enclosure (multi-backend)
   if (buildAll || stages.includes("enclosure")) {
-    artifacts.push(...generateOpenSCADEnclosure(doc));
+    const backend = selectEnclosureBackend(doc, config, registry);
+    artifacts.push(...await buildEnclosure(doc, backend, config));
+  }
+
+  // PCB (multi-backend)
+  if (buildAll || stages.includes("pcb")) {
+    const backend = selectPCBBackend(doc, config, registry);
+    artifacts.push(...buildPCB(doc, backend));
+  }
+
+  // Visualization (multi-backend — only if requested or config'd)
+  if (
+    stages.includes("visualization") ||
+    (buildAll && (doc.visualization?.generate3DModel || doc.visualization?.generateVideo))
+  ) {
+    const backend = selectVizBackend(doc, config, registry);
+    artifacts.push(...await buildVisualization(doc, backend, config));
   }
 
   // BOM

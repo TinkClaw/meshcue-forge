@@ -170,6 +170,12 @@ export type EnclosureType =
   | "friction-fit"
   | "open-frame";
 
+export type EnclosureBackend =
+  | "openscad"
+  | "cadquery"
+  | "zoo-cad"
+  | "llama-mesh";
+
 export type CutoutType =
   | "usb-c"
   | "usb-micro"
@@ -207,6 +213,35 @@ export interface EnclosureConfig {
   labelEmboss?: string;
   material?: "pla" | "petg" | "abs" | "tpu";
   printOrientation?: "upright" | "flat" | "on-side";
+  backend?: EnclosureBackend;
+  organicShape?: string; // Natural language shape hint for AI backends
+}
+
+// ─── PCB ────────────────────────────────────────────────────
+
+export type PCBBackend = "skidl" | "kicad";
+
+export interface PCBConfig {
+  backend?: PCBBackend;
+  layers?: 2 | 4;
+  widthMm?: number;
+  heightMm?: number;
+  copperWeight?: "1oz" | "2oz";
+  surfaceFinish?: "hasl" | "enig" | "osp";
+  autoRoute?: boolean;
+}
+
+// ─── Visualization ──────────────────────────────────────────
+
+export type VisualizationBackend = "hunyuan3d" | "llama-mesh" | "cosmos";
+
+export interface VisualizationConfig {
+  generate3DModel?: boolean;
+  generateVideo?: boolean;
+  backend?: VisualizationBackend;
+  style?: "photorealistic" | "technical" | "cartoon";
+  background?: string;
+  cameraAngle?: "front" | "isometric" | "top" | "exploded";
 }
 
 // ─── BOM ─────────────────────────────────────────────────────
@@ -258,6 +293,8 @@ export interface MHDLDocument {
   board: Board;
   firmware: FirmwareConfig;
   enclosure: EnclosureConfig;
+  pcb?: PCBConfig;
+  visualization?: VisualizationConfig;
   bom?: BOMConfig;
   docs?: DocsConfig;
 }
@@ -288,11 +325,23 @@ export interface ValidationResult {
 
 // ─── Build Output ────────────────────────────────────────────
 
+export type BuildStageType =
+  | "circuit"
+  | "firmware"
+  | "enclosure"
+  | "pcb"
+  | "bom"
+  | "docs"
+  | "visualization";
+
 export interface BuildArtifact {
-  stage: "circuit" | "firmware" | "enclosure" | "pcb" | "bom" | "docs";
+  stage: BuildStageType;
   filename: string;
   content: string;
   format: string;
+  contentType?: "text" | "base64" | "url";
+  mimeType?: string;
+  backend?: string;
 }
 
 export interface BuildResult {
@@ -300,4 +349,28 @@ export interface BuildResult {
   artifacts: BuildArtifact[];
   validation: ValidationResult;
   buildTime: number;
+}
+
+// ─── Forge Configuration ────────────────────────────────────
+
+export interface ForgeConfig {
+  // API endpoints
+  zooCadApiKey?: string;
+  zooCadEndpoint?: string;
+  llamaMeshEndpoint?: string;
+  hunyuan3dEndpoint?: string;
+  cosmosEndpoint?: string;
+
+  // Local tools
+  pythonPath?: string;
+  cadqueryAvailable?: boolean;
+  skidlAvailable?: boolean;
+  kicadPath?: string;
+  openscadPath?: string;
+
+  // Preferences
+  defaultEnclosureBackend?: EnclosureBackend;
+  defaultPCBBackend?: PCBBackend;
+  defaultVisualizationBackend?: VisualizationBackend;
+  enableGpuBackends?: boolean;
 }

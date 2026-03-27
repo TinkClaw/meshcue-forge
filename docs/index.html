@@ -441,6 +441,7 @@
         <div class="progress-step" id="step-circuit"><span class="step-icon">&#9879;</span><span class="step-label">Building Wokwi circuit...</span><span class="step-time"></span></div>
         <div class="progress-step" id="step-firmware"><span class="step-icon">&#10697;</span><span class="step-label">Generating Arduino firmware...</span><span class="step-time"></span></div>
         <div class="progress-step" id="step-enclosure"><span class="step-icon">&#9726;</span><span class="step-label">Designing 3D printable enclosure...</span><span class="step-time"></span></div>
+        <div class="progress-step" id="step-pcb"><span class="step-icon">&#9881;</span><span class="step-label">Generating SKiDL PCB netlist...</span><span class="step-time"></span></div>
         <div class="progress-step" id="step-docs"><span class="step-icon">&#9998;</span><span class="step-label">Writing documentation...</span><span class="step-time"></span></div>
         <div class="progress-step" id="step-done"><span class="step-icon">&#10003;</span><span class="step-label">Done!</span><span class="step-time"></span></div>
       </div>
@@ -453,13 +454,14 @@
   <div class="container">
     <div class="results-header">
       <h2 id="resultsTitle">Your hardware is ready</h2>
-      <p id="resultsSub">8 artifacts generated &mdash; ready to simulate, print, and assemble</p>
+      <p id="resultsSub">10 artifacts generated &mdash; circuit, firmware, enclosure, PCB, BOM, and docs</p>
     </div>
 
     <div class="results-tabs">
       <button class="tab-btn active" onclick="switchTab('circuit')">Circuit</button>
       <button class="tab-btn" onclick="switchTab('firmware')">Firmware</button>
       <button class="tab-btn" onclick="switchTab('enclosure')">3D Enclosure</button>
+      <button class="tab-btn" onclick="switchTab('pcb')">PCB</button>
       <button class="tab-btn" onclick="switchTab('bom')">BOM</button>
       <button class="tab-btn" onclick="switchTab('mhdl')">MHDL Spec</button>
     </div>
@@ -495,40 +497,47 @@
     <!-- Enclosure Tab -->
     <div class="tab-panel" id="panel-enclosure">
       <div class="enclosure-preview">
-        <div class="enclosure-3d">
-          <div class="enclosure-box" id="enclosureBox">
-            <div class="e-face e-front">
-              <span class="e-label" id="encLabel">FORGE</span>
-              <div class="e-cutout" style="width:26px;height:14px;top:30%;left:10%;"></div>
-              <div class="e-led" id="led1" style="top:20%;right:20%;color:#4ade80;background:#4ade80;"></div>
-              <div class="e-led" id="led2" style="top:20%;right:30%;color:#facc15;background:#facc15;"></div>
-              <div class="e-led" id="led3" style="top:20%;right:40%;color:#f87171;background:#f87171;"></div>
-            </div>
-            <div class="e-face e-back">
-              <div class="e-cutout" style="width:12px;height:5px;top:60%;left:50%;transform:translateX(-50%);"></div>
-            </div>
-            <div class="e-face e-left"></div>
-            <div class="e-face e-right"></div>
-            <div class="e-face e-top"></div>
-            <div class="e-face e-bottom"></div>
-          </div>
-        </div>
+        <!-- Three.js 3D Viewer -->
+        <canvas id="enclosure3DCanvas" style="width:100%;height:320px;border-radius:12px;cursor:grab;"></canvas>
         <div class="enclosure-stats">
           <div><span id="encW">90</span>mm W</div>
           <div><span id="encH">64</span>mm H</div>
           <div><span id="encD">24</span>mm D</div>
-          <div>Type: <span>snap-fit</span></div>
+          <div>Type: <span id="encType">snap-fit</span></div>
+          <div style="margin-left:auto;">
+            <select id="encBackend" style="background:rgba(255,255,255,0.08);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;padding:4px 10px;font-size:12px;font-family:inherit;cursor:pointer;">
+              <option value="openscad" selected>OpenSCAD</option>
+              <option value="cadquery">CadQuery</option>
+              <option value="zoo-cad">Zoo Text-to-CAD</option>
+              <option value="llama-mesh">LLaMA-Mesh</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="code-box" style="margin-top:16px;">
         <div class="code-header">
           <div class="code-header-left">
             <div class="code-dots"><span style="background:#ef4444"></span><span style="background:#eab308"></span><span style="background:#22c55e"></span></div>
-            <span class="code-filename">enclosure.scad</span>
+            <span class="code-filename" id="encFilename">enclosure.scad</span>
           </div>
           <button class="copy-btn" onclick="copyCode('enclosure')">Copy</button>
         </div>
         <div class="code-body" id="code-enclosure" style="max-height:300px;"></div>
+      </div>
+    </div>
+
+    <!-- PCB Tab -->
+    <div class="tab-panel" id="panel-pcb">
+      <div class="code-box">
+        <div class="code-header">
+          <div class="code-header-left">
+            <div class="code-dots"><span style="background:#ef4444"></span><span style="background:#eab308"></span><span style="background:#22c55e"></span></div>
+            <span class="code-filename">circuit.py</span>
+            <span style="margin-left:12px;font-size:11px;color:var(--text-dim);font-weight:400;">SKiDL → KiCad netlist</span>
+          </div>
+          <button class="copy-btn" onclick="copyCode('pcb')">Copy</button>
+        </div>
+        <div class="code-body" id="code-pcb" style="max-height:400px;"></div>
       </div>
     </div>
 
@@ -559,6 +568,7 @@
       <button class="dl-btn" onclick="download('circuit')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg> diagram.json</button>
       <button class="dl-btn" onclick="download('firmware')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg> main.ino</button>
       <button class="dl-btn" onclick="download('enclosure')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg> enclosure.scad</button>
+      <button class="dl-btn" onclick="download('pcb')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg> circuit.py</button>
       <button class="dl-btn dl-all" onclick="downloadAll()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg> Download All</button>
     </div>
   </div>
@@ -573,8 +583,8 @@
     <div class="features-grid">
       <div class="f-card">
         <div class="f-icon" style="background:rgba(139,92,246,0.12);color:var(--violet);">&#9889;</div>
-        <h3>Instant builds</h3>
-        <p>Full pipeline runs in under a millisecond. Circuit, firmware, case, docs &mdash; all at once.</p>
+        <h3>6 build backends</h3>
+        <p>OpenSCAD, CadQuery, Zoo Text-to-CAD, LLaMA-Mesh, Hunyuan3D, Cosmos &mdash; auto-selected or choose your own.</p>
       </div>
       <div class="f-card">
         <div class="f-icon" style="background:rgba(74,222,128,0.12);color:var(--green);">&#10004;</div>
@@ -583,18 +593,18 @@
       </div>
       <div class="f-card">
         <div class="f-icon" style="background:rgba(217,70,239,0.12);color:var(--fuchsia);">&#9726;</div>
-        <h3>3D print ready</h3>
-        <p>Snap-fit enclosures with USB cutouts, LED holes, button caps, ventilation, and embossed labels.</p>
+        <h3>PCB + 3D print ready</h3>
+        <p>SKiDL netlists for KiCad, parametric enclosures with snap-fit, cutouts, mounts, and ventilation.</p>
       </div>
       <div class="f-card">
         <div class="f-icon" style="background:rgba(245,158,11,0.12);color:var(--orange);">&#9881;</div>
-        <h3>9 MCU families</h3>
-        <p>ESP32, Arduino, RP2040, STM32, ATtiny &mdash; auto-selected based on your requirements.</p>
+        <h3>200+ product archetypes</h3>
+        <p>Say "talking mouse" or "smart doorbell" &mdash; Forge knows the components. 28 categories, 200+ products.</p>
       </div>
       <div class="f-card">
         <div class="f-icon" style="background:rgba(34,211,238,0.12);color:var(--cyan);">&#10697;</div>
-        <h3>Open standard</h3>
-        <p>MHDL is a single JSON spec for your entire project. Git-friendly, team-friendly, AI-friendly.</p>
+        <h3>AI 3D visualization</h3>
+        <p>NVIDIA Hunyuan3D for textured models, Cosmos Transfer for photorealistic video of your device.</p>
       </div>
       <div class="f-card">
         <div class="f-icon" style="background:rgba(139,92,246,0.12);color:var(--violet);">&#9879;</div>
@@ -615,6 +625,138 @@
     </div>
   </div>
 </footer>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Three.js 3D Viewer ──────────────────────
+let threeScene, threeCamera, threeRenderer, threeControls, enclosureMesh;
+
+function init3DViewer() {
+  const canvas = document.getElementById('enclosure3DCanvas');
+  if (!canvas || threeRenderer) return;
+
+  threeScene = new THREE.Scene();
+  threeCamera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+  threeCamera.position.set(80, 60, 100);
+
+  threeRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  threeRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
+  threeRenderer.setPixelRatio(window.devicePixelRatio);
+  threeRenderer.setClearColor(0x000000, 0);
+
+  // Lighting
+  threeScene.add(new THREE.AmbientLight(0x8B5CF6, 0.4));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(50, 80, 60);
+  threeScene.add(dirLight);
+  const rimLight = new THREE.DirectionalLight(0xD946EF, 0.3);
+  rimLight.position.set(-40, 20, -50);
+  threeScene.add(rimLight);
+
+  // Grid
+  const grid = new THREE.GridHelper(120, 20, 0x334155, 0x1e293b);
+  grid.position.y = -1;
+  threeScene.add(grid);
+
+  // Controls
+  threeControls = new OrbitControls(threeCamera, threeRenderer.domElement);
+  threeControls.enableDamping = true;
+  threeControls.autoRotate = true;
+  threeControls.autoRotateSpeed = 1.5;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    threeControls.update();
+    threeRenderer.render(threeScene, threeCamera);
+  }
+  animate();
+
+  // Resize
+  new ResizeObserver(() => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    threeCamera.aspect = w / h;
+    threeCamera.updateProjectionMatrix();
+    threeRenderer.setSize(w, h);
+  }).observe(canvas);
+}
+
+function updateEnclosureMesh(doc) {
+  if (!threeScene) init3DViewer();
+  if (!threeScene) return;
+
+  // Remove old mesh
+  if (enclosureMesh) { threeScene.remove(enclosureMesh); enclosureMesh.geometry?.dispose(); }
+
+  const dims = doc.board.dimensions || { widthMm: 60, heightMm: 40, depthMm: 20 };
+  const wall = doc.enclosure.wallThicknessMm;
+  const w = dims.widthMm + wall * 2, h = dims.heightMm + wall * 2, d = (dims.depthMm || 20) + wall * 2;
+  const r = Math.min(doc.enclosure.cornerRadiusMm, w / 4, h / 4, d / 4);
+
+  // Rounded box via Three.js RoundedBoxGeometry approach (approximate with box + edges)
+  const group = new THREE.Group();
+
+  // Base shell (translucent)
+  const baseMat = new THREE.MeshPhysicalMaterial({
+    color: 0x8B5CF6, transparent: true, opacity: 0.18,
+    roughness: 0.3, metalness: 0.1, side: THREE.DoubleSide,
+  });
+  const splitZ = d * 0.7;
+  const baseGeo = new THREE.BoxGeometry(w, splitZ, h);
+  const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+  baseMesh.position.y = splitZ / 2;
+  group.add(baseMesh);
+
+  // Lid (slightly different color)
+  const lidMat = new THREE.MeshPhysicalMaterial({
+    color: 0xD946EF, transparent: true, opacity: 0.15,
+    roughness: 0.3, metalness: 0.1, side: THREE.DoubleSide,
+  });
+  const lidH = d - splitZ;
+  const lidGeo = new THREE.BoxGeometry(w, lidH, h);
+  const lidMesh = new THREE.Mesh(lidGeo, lidMat);
+  lidMesh.position.y = splitZ + lidH / 2;
+  group.add(lidMesh);
+
+  // Wireframe edges
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x8B5CF6, transparent: true, opacity: 0.5 });
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), edgeMat).translateY(splitZ / 2));
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(lidGeo), edgeMat).translateY(splitZ + lidH / 2));
+
+  // Cutout indicators
+  const cutoutMat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.4 });
+  for (const cutout of doc.enclosure.cutouts) {
+    const cw = cutout.type === 'oled-window' ? 27 : cutout.type === 'usb-c' ? 9.5 : cutout.type === 'led-hole' ? 5 : 8;
+    const ch = cutout.type === 'oled-window' ? 15 : cutout.type === 'usb-c' ? 3.5 : cutout.type === 'led-hole' ? 5 : 5;
+    const cGeo = new THREE.BoxGeometry(cw, ch, wall + 1);
+    const cMesh = new THREE.Mesh(cGeo, cutoutMat);
+    if (cutout.wall === 'front') { cMesh.position.set(0, d / 2, -h / 2); }
+    else if (cutout.wall === 'back') { cMesh.position.set(0, d / 2, h / 2); }
+    else if (cutout.wall === 'left') { cMesh.position.set(-w / 2, d / 2, 0); cMesh.rotation.y = Math.PI / 2; }
+    else if (cutout.wall === 'right') { cMesh.position.set(w / 2, d / 2, 0); cMesh.rotation.y = Math.PI / 2; }
+    group.add(cMesh);
+  }
+
+  // LED indicators
+  const leds = doc.board.components.filter(c => c.type === 'led');
+  const ledColorMap = { green: 0x4ade80, red: 0xf87171, blue: 0x60a5fa, yellow: 0xfacc15, white: 0xe2e8f0, orange: 0xfb923c };
+  leds.forEach((led, i) => {
+    const col = ledColorMap[led.properties?.color] || 0x4ade80;
+    const ledGeo = new THREE.SphereGeometry(2, 16, 16);
+    const ledMat = new THREE.MeshBasicMaterial({ color: col });
+    const ledMesh = new THREE.Mesh(ledGeo, ledMat);
+    ledMesh.position.set(-w / 3 + i * 8, d * 0.7, -h / 2 - 0.5);
+    group.add(ledMesh);
+  });
+
+  enclosureMesh = group;
+  threeScene.add(group);
+}
+window.updateEnclosureMesh = updateEnclosureMesh;
+window.init3DViewer = init3DViewer;
+</script>
 
 <script>
 // ── Forge Engine (client-side) ──────────────
@@ -980,6 +1122,7 @@ if(c.type==="neopixel")lines.push(`\nvoid ${c.id}_setColor(uint8_t r, uint8_t g,
 if(doc.board.components.some(c=>c.type==="ultrasonic")){const u=doc.board.components.find(c=>c.type==="ultrasonic");lines.push(`\nlong readDistance() {\n  digitalWrite(PIN_${u.id.toUpperCase()}_TRIG, LOW);\n  delayMicroseconds(2);\n  digitalWrite(PIN_${u.id.toUpperCase()}_TRIG, HIGH);\n  delayMicroseconds(10);\n  digitalWrite(PIN_${u.id.toUpperCase()}_TRIG, LOW);\n  return pulseIn(PIN_${u.id.toUpperCase()}_ECHO, HIGH) / 58;\n}`);}
 return lines.join("\n");}
 function genEnclosure(doc){const w=doc.board.dimensions.widthMm+4,h=doc.board.dimensions.heightMm+4,d=(doc.board.dimensions.depthMm||20)+4;return`/**\n * ${doc.meta.name} — 3D Printable Enclosure\n * Generated by MeshCue Forge\n * Material: PLA | Layer: 0.2mm | Infill: 20%\n */\n\ncase_w = ${w};\ncase_h = ${h};\ncase_d = ${d};\nwall = 2;\ncorner_r = 3;\nsplit_z = ${(d*0.7).toFixed(1)};\ntolerance = 0.3;\n\nmodule rounded_box(w, h, d, r) {\n  hull() {\n    for (x=[r,w-r]) for (y=[r,h-r]) for (z=[r,d-r])\n      translate([x,y,z]) sphere(r=r, $fn=24);\n  }\n}\n\nmodule shell() {\n  difference() {\n    rounded_box(case_w, case_h, case_d, corner_r);\n    translate([wall,wall,wall])\n      rounded_box(case_w-wall*2, case_h-wall*2, case_d-wall*2, max(corner_r-wall,0.1));\n  }\n}\n\nmodule cutouts() {\n  // USB-C (back)\n  translate([case_w/2-4.75, case_h-wall-0.1, case_d/2-1.75])\n    cube([9.5, wall+0.2, 3.5]);\n${doc.enclosure.cutouts.filter(c=>c.type==="oled-window").map(()=>`  // OLED window\n  translate([case_w/2-13.5, -0.1, case_d/2-7.5])\n    cube([27, wall+0.2, 15]);`).join("\n")}\n${doc.enclosure.cutouts.filter(c=>c.type==="led-hole").map((_,i)=>`  // LED ${i+1}\n  translate([${15+i*10}, -0.1, case_d*0.7])\n    rotate([-90,0,0]) cylinder(h=wall+0.2, d=5, $fn=24);`).join("\n")}\n}\n\nmodule mount_posts() {\n${doc.board.mountingHoles.positions.map(p=>`  translate([${p.x+2},${p.y+2},wall]) difference() {\n    cylinder(h=5, r=2.5, $fn=24);\n    cylinder(h=5.1, r=1.5, $fn=24);\n  }`).join("\n")}\n}\n\nmodule base() {\n  difference() {\n    intersection() { shell(); cube([case_w,case_h,split_z]); }\n    cutouts();\n  }\n  mount_posts();\n}\n\nmodule lid() {\n  difference() {\n    intersection() { shell(); translate([0,0,split_z]) cube([case_w,case_h,case_d-split_z]); }\n    cutouts();\n  }\n}\n\n// Render\nbase();\n// lid();\n// Exploded: base(); translate([0,0,split_z+15]) lid();`;}
+function genPCB(doc){const mcu=doc.board.mcu;const lines=[];lines.push(`#!/usr/bin/env python3`);lines.push(`"""\nSKiDL PCB Netlist — ${doc.meta.name}\n${doc.meta.description}\nGenerated by MeshCue Forge\n"""\n`);lines.push(`from skidl import *\n`);lines.push(`# MCU: ${mcu.family}`);lines.push(`${mcu.id} = Part("RF_Module", "${mcu.model||mcu.family}",\n    footprint="RF_Module:ESP32-WROOM-32")\n`);lines.push(`vcc_net = Net("VCC")\ngnd_net = Net("GND")\n`);lines.push(`# Decoupling`);lines.push(`decap = Part("Device", "C", value="100nF",\n    footprint="Capacitor_SMD:C_0805_2012Metric")\nvcc_net += decap[1]\ngnd_net += decap[2]\n`);const partMap={led:["Device","LED","LED_SMD:LED_0805_2012Metric"],button:["Switch","SW_Push","Button_Switch_SMD:SW_SPST_CK_RS282G05A3"],resistor:["Device","R","Resistor_SMD:R_0805_2012Metric"],capacitor:["Device","C","Capacitor_SMD:C_0805_2012Metric"],oled:["Display_Graphic","SSD1306","Display:OLED_0.96in_I2C"],buzzer:["Device","Buzzer","Buzzer_Beeper:Buzzer_12x9.5RM7.6"],sensor:["Sensor","Sensor_Generic","Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"],neopixel:["LED","WS2812B","LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"],servo:["Motor","Motor_Servo","Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"],motor:["Motor","Motor_DC","Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"],relay:["Relay","Relay_SPDT","Relay_THT:Relay_SPDT_Finder_36.11"],speaker:["Device","Speaker","Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"],microphone:["Device","Microphone","Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"]};lines.push(`# Components`);for(const c of doc.board.components){const p=partMap[c.type]||["Connector_Generic","Conn_01x04","Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical"];const val=c.value?`, value="${c.value}"`:"";lines.push(`${c.id.replace(/[^a-zA-Z0-9_]/g,"_")} = Part("${p[0]}", "${p[1]}"${val},\n    footprint="${p[2]}")`);}lines.push(``);let ni=0;for(const conn of doc.board.connections){const [fc,fp]=conn.from.split(".");const [tc,tp]=conn.to.split(".");const nn=conn.net||`N${String(ni++).padStart(3,"0")}`;lines.push(`net_${nn} = Net("${nn}")`);lines.push(`net_${nn} += ${fc.replace(/[^a-zA-Z0-9_]/g,"_")}["${fp}"], ${tc.replace(/[^a-zA-Z0-9_]/g,"_")}["${tp}"]`);}lines.push(`\ngenerate_netlist()\nprint("Netlist generated: circuit.net")`);return lines.join("\n");}
 function genBOM(doc){return[{name:doc.board.mcu.model,type:"MCU",qty:1,notes:doc.board.mcu.family},...doc.board.components.map(c=>({name:c.id,type:c.type,qty:1,notes:c.properties?.color||""})),{name:"M3 threaded insert",type:"Hardware",qty:4,notes:"Mounting"},{name:"M3x6mm screw",type:"Hardware",qty:4,notes:"Mounting"}];}
 const typeColors={MCU:"rgba(139,92,246,0.15);color:var(--violet)",led:"rgba(74,222,128,0.15);color:var(--green)",button:"rgba(245,158,11,0.15);color:var(--orange)",oled:"rgba(34,211,238,0.15);color:var(--cyan)",buzzer:"rgba(217,70,239,0.15);color:var(--fuchsia)",sensor:"rgba(248,113,113,0.15);color:var(--red)",speaker:"rgba(217,70,239,0.15);color:var(--fuchsia)",microphone:"rgba(217,70,239,0.15);color:var(--fuchsia)",servo:"rgba(245,158,11,0.15);color:var(--orange)",motor:"rgba(245,158,11,0.15);color:var(--orange)",relay:"rgba(248,113,113,0.15);color:var(--red)",neopixel:"rgba(74,222,128,0.15);color:var(--green)",ultrasonic:"rgba(34,211,238,0.15);color:var(--cyan)",pir:"rgba(248,113,113,0.15);color:var(--red)",ldr:"rgba(245,158,11,0.15);color:var(--orange)",gps:"rgba(34,211,238,0.15);color:var(--cyan)",rfid:"rgba(139,92,246,0.15);color:var(--violet)",potentiometer:"rgba(245,158,11,0.15);color:var(--orange)",moisture:"rgba(34,211,238,0.15);color:var(--cyan)",gas_sensor:"rgba(248,113,113,0.15);color:var(--red)",ir_receiver:"rgba(248,113,113,0.15);color:var(--red)",ir_emitter:"rgba(248,113,113,0.15);color:var(--red)",Hardware:"rgba(255,255,255,0.08);color:var(--text-dim)"};
 
@@ -995,7 +1138,7 @@ async function forge(){
   document.getElementById("results").classList.remove("show");
   const prog=document.getElementById("forgeProgress");
   prog.classList.add("open");
-  const steps=["parse","mhdl","validate","circuit","firmware","enclosure","docs","done"];
+  const steps=["parse","mhdl","validate","circuit","firmware","enclosure","pcb","docs","done"];
   steps.forEach(s=>{const el=document.getElementById("step-"+s);el.className="progress-step step-pending";el.querySelector(".step-time").textContent="";});
   async function runStep(id,fn,delay_ms){
     const el=document.getElementById("step-"+id);
@@ -1013,6 +1156,7 @@ async function forge(){
   await runStep("circuit",()=>{artifacts.circuit=genCircuit(mhdlDoc);},350);
   await runStep("firmware",()=>{artifacts.firmware=genFirmware(mhdlDoc);},400);
   await runStep("enclosure",()=>{artifacts.enclosure=genEnclosure(mhdlDoc);},450);
+  await runStep("pcb",()=>{artifacts.pcb=genPCB(mhdlDoc);},350);
   await runStep("docs",()=>{artifacts.bom=genBOM(mhdlDoc);artifacts.mhdl=JSON.stringify(mhdlDoc,null,2);},300);
   await runStep("done",null,200);
   btn.disabled=false;btn.textContent="Forge";btn.classList.remove("forging");
@@ -1026,14 +1170,16 @@ function showResults(){
   document.getElementById("code-circuit").textContent=artifacts.circuit;
   document.getElementById("code-firmware").textContent=artifacts.firmware;
   document.getElementById("code-enclosure").textContent=artifacts.enclosure;
+  document.getElementById("code-pcb").textContent=artifacts.pcb||"";
   document.getElementById("code-mhdl").textContent=artifacts.mhdl;
-  document.getElementById("encLabel").textContent=mhdlDoc.enclosure.labelEmboss||"FORGE";
+  // Three.js 3D viewer
+  if(typeof init3DViewer==="function")init3DViewer();
+  if(typeof updateEnclosureMesh==="function")updateEnclosureMesh(mhdlDoc);
+  document.getElementById("encType").textContent=mhdlDoc.enclosure.type;
   const dims=mhdlDoc.board.dimensions;
   document.getElementById("encW").textContent=dims.widthMm+4;
   document.getElementById("encH").textContent=dims.heightMm+4;
   document.getElementById("encD").textContent=(dims.depthMm||20)+4;
-  const leds=mhdlDoc.board.components.filter(c=>c.type==="led");
-  ["led1","led2","led3"].forEach((id,i)=>{const el=document.getElementById(id);if(leds[i]){el.style.display="block";const col=leds[i].properties?.color||"green";const cmap={green:"#4ade80",yellow:"#facc15",red:"#f87171",blue:"#60a5fa",white:"#e2e8f0",orange:"#fb923c"};el.style.color=cmap[col]||"#4ade80";el.style.background=cmap[col]||"#4ade80";}else el.style.display="none";});
   const tbody=document.getElementById("bomBody");
   tbody.innerHTML="";
   for(const item of artifacts.bom){
@@ -1052,20 +1198,20 @@ function switchTab(name){
 }
 
 function copyCode(type){
-  const map={circuit:artifacts.circuit,firmware:artifacts.firmware,enclosure:artifacts.enclosure,mhdl:artifacts.mhdl};
+  const map={circuit:artifacts.circuit,firmware:artifacts.firmware,enclosure:artifacts.enclosure,pcb:artifacts.pcb,mhdl:artifacts.mhdl};
   navigator.clipboard.writeText(map[type]||"");
   const btn=event.target;btn.textContent="Copied!";btn.classList.add("copied");
   setTimeout(()=>{btn.textContent="Copy";btn.classList.remove("copied");},2000);
 }
 
 function download(type){
-  const map={circuit:{data:artifacts.circuit,name:"diagram.json"},firmware:{data:artifacts.firmware,name:"main.ino"},enclosure:{data:artifacts.enclosure,name:"enclosure.scad"},mhdl:{data:artifacts.mhdl,name:"board.mhdl.json"}};
+  const map={circuit:{data:artifacts.circuit,name:"diagram.json"},firmware:{data:artifacts.firmware,name:"main.ino"},enclosure:{data:artifacts.enclosure,name:"enclosure.scad"},pcb:{data:artifacts.pcb,name:"circuit.py"},mhdl:{data:artifacts.mhdl,name:"board.mhdl.json"}};
   const f=map[type];if(!f)return;
   const blob=new Blob([f.data],{type:"text/plain"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=f.name;a.click();
 }
 
-function downloadAll(){["circuit","firmware","enclosure","mhdl"].forEach(t=>download(t));}
+function downloadAll(){["circuit","firmware","enclosure","pcb","mhdl"].forEach(t=>download(t));}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
 // Auto-resize textarea
