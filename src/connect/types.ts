@@ -48,6 +48,7 @@ export interface EmergencyContact {
 // Message
 export interface ConnectMessage {
   id: string;
+  clinicId: string;
   direction: Direction;
   channel: Channel;
   priority: Priority;
@@ -150,4 +151,72 @@ export interface ConsentEntry {
   channel: Channel;
   timestamp: string;
   details?: string;
+}
+
+// ─── Multi-Tenant Clinic Model ──────────────────────────────────
+
+// Clinic — the tenant that owns communication channels
+export interface Clinic {
+  id: string;
+  name: string;
+  location: string;
+  country: string;
+  language: "en" | "fr" | "pt" | "es" | "sw" | "ar" | "bn" | "hi" | "zh";
+  timezone: string;
+
+  // Clinic-owned communication credentials
+  channels: ClinicChannelConfig;
+
+  // Clinic admin
+  adminPhone: string;
+  adminName: string;
+
+  // Operational
+  operatingHours?: { start: string; end: string }; // "08:00" - "17:00"
+  emergencyPhone?: string; // after-hours emergency
+
+  // Subscription
+  tier: "free" | "basic" | "professional" | "enterprise";
+  createdAt: string;
+  active: boolean;
+}
+
+export interface ClinicChannelConfig {
+  sms?: {
+    provider: "africastalking" | "twilio" | "vonage";
+    apiKey: string;
+    apiSecret?: string; // for Twilio SID
+    username?: string; // for Africa's Talking
+    shortCode?: string;
+    senderId?: string;
+  };
+  whatsapp?: {
+    token: string;
+    phoneId: string;
+    businessName?: string;
+  };
+  voice?: {
+    provider: "africastalking" | "twilio";
+    apiKey?: string;
+    sid?: string;
+    token?: string;
+    phone?: string;
+  };
+  ussd?: {
+    serviceCode: string; // e.g., *384*123#
+    provider: "africastalking";
+    apiKey: string;
+    username?: string;
+  };
+}
+
+// Subscription tiers
+export interface SubscriptionTier {
+  name: string;
+  maxPatients: number;
+  maxDevices: number;
+  maxMessagesPerMonth: number;
+  channels: Channel[];
+  features: string[];
+  priceUsd: number; // 0 for free tier
 }

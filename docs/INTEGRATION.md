@@ -229,10 +229,147 @@ Note: The server expects newline-delimited JSON-RPC messages on stdin and writes
 | `meshforge-build` | MHDL spec to build artifacts | `spec` (MHDL JSON string) |
 | `meshforge-validate` | Run Design Rule Checks on a spec | `spec` (MHDL JSON string) |
 | `meshforge-iterate` | Patch an existing spec and rebuild | `spec` (MHDL JSON), `patch` (string) |
-| `meshcue-connect-alert` | Send critical alert to patient + family + nurse | `patientId`, `reading`, `deviceId` |
-| `meshcue-connect-send` | Send message to a phone number | `phone`, `message`, `channel`, `language` |
-| `meshcue-connect-register` | Register patient with contacts and consent | `phone`, `name`, `language`, `emergencyContacts` |
-| `meshcue-connect-inbox` | Retrieve incoming messages | `since` (ISO timestamp), `status` |
+| `meshcue-clinic-register` | Register a new clinic | `name`, `location`, `language`, `tier` |
+| `meshcue-clinic-setup-sms` | Configure clinic SMS provider | `clinicId`, `provider`, `apiKey`, `shortCode` |
+| `meshcue-clinic-setup-whatsapp` | Configure clinic WhatsApp API | `clinicId`, `token`, `phoneId` |
+| `meshcue-clinic-setup-voice` | Configure clinic Voice/IVR provider | `clinicId`, `provider`, `credentials` |
+| `meshcue-clinic-test-channel` | Test a clinic's configured channel | `clinicId`, `channel`, `testPhone` |
+| `meshcue-clinic-dashboard` | View clinic stats and channel health | `clinicId` |
+| `meshcue-connect-alert` | Send critical alert to patient + family + nurse | `clinicId`, `patientId`, `reading` |
+| `meshcue-connect-send` | Send message to a phone number | `clinicId`, `phone`, `message`, `channel` |
+| `meshcue-connect-register` | Register patient under a clinic | `clinicId`, `phone`, `name`, `language` |
+| `meshcue-connect-inbox` | Retrieve incoming messages for a clinic | `clinicId`, `since`, `status` |
+
+---
+
+## Clinic Onboarding
+
+MeshCue Connect uses a clinic-owned multi-tenant model. Each clinic registers, connects their own SMS/WhatsApp/Voice credentials, and manages their own patients. Here is the step-by-step onboarding flow using MCP tools.
+
+### 1. Register a clinic
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-clinic-register",
+    "arguments": {
+      "name": "Kibera Health Center",
+      "location": "Nairobi, Kenya",
+      "language": "sw",
+      "contactEmail": "admin@kiberahealth.org",
+      "tier": "free"
+    }
+  }
+}
+```
+
+Response includes `clinicId` — use this for all subsequent calls.
+
+### 2. Setup SMS (Africa's Talking)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-clinic-setup-sms",
+    "arguments": {
+      "clinicId": "clinic-001",
+      "provider": "africastalking",
+      "apiKey": "your-at-api-key",
+      "username": "your-at-username",
+      "shortCode": "5555"
+    }
+  }
+}
+```
+
+For Twilio, use `"provider": "twilio"` with `"accountSid"`, `"authToken"`, and `"phoneNumber"` instead.
+
+### 3. Test the channel
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-clinic-test-channel",
+    "arguments": {
+      "clinicId": "clinic-001",
+      "channel": "sms",
+      "testPhone": "+254700100100"
+    }
+  }
+}
+```
+
+Response confirms delivery status and round-trip time.
+
+### 4. Register a patient
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-connect-register",
+    "arguments": {
+      "clinicId": "clinic-001",
+      "name": "Amara Diallo",
+      "phone": "+254700100100",
+      "language": "sw",
+      "emergencyContacts": [
+        { "phone": "+254700200200", "relation": "mother", "name": "Fatou" }
+      ],
+      "consent": true
+    }
+  }
+}
+```
+
+### 5. Send a test message
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-connect-send",
+    "arguments": {
+      "clinicId": "clinic-001",
+      "phone": "+254700100100",
+      "template": "consent_request",
+      "channel": "sms",
+      "language": "sw"
+    }
+  }
+}
+```
+
+### 6. View clinic dashboard
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "tools/call",
+  "params": {
+    "name": "meshcue-clinic-dashboard",
+    "arguments": {
+      "clinicId": "clinic-001"
+    }
+  }
+}
+```
+
+Response includes patient count, device count, messages sent/received, channel health status, and subscription tier usage.
 
 ---
 

@@ -281,11 +281,29 @@ npm run format:check   # Prettier check
 
 MeshCue Connect is the patient communication layer — it closes the loop between medical devices, clinics, patients, and families.
 
-### What It Does
+### Multi-Tenant Clinic Model
 
-- **Clinic-to-patient-to-family communication** — critical readings trigger alerts that flow from device to clinic to patient to family, automatically.
-- **Smart triage** — AI-powered keyword detection routes incoming messages by urgency (e.g., FEVER triggers nurse notification, HELP triggers emergency escalation, STOP triggers instant opt-out).
-- **Patient consent management** — patients opt in/out at any time via SMS or USSD. Consent state is tracked per-patient, per-channel.
+MeshCue Connect operates as a **clinic-owned multi-tenant platform**:
+
+- **Clinics register and own their channels** — each clinic brings their own Africa's Talking or Twilio credentials, their own phone numbers, and their own short codes. MeshCue never owns or controls a clinic's communication channels.
+- **MeshCue is the routing platform, not the phone number owner** — the platform routes messages, manages consent, and handles triage logic. Clinics retain full ownership of their patient data and API keys.
+- **Patient data is scoped per-clinic** — a patient registered at Clinic A is not visible to Clinic B. Each clinic manages their own patient roster, consent records, and message history.
+
+### Subscription Tiers
+
+| | Free | Basic | Professional | Enterprise |
+|---|---|---|---|---|
+| Patients | 50 | 500 | 2,000 | Unlimited |
+| Devices | 5 | 50 | 200 | Unlimited |
+| Messages/month | 500 | 5,000 | 20,000 | Unlimited |
+| SMS | Yes | Yes | Yes | Yes |
+| USSD | — | Yes | Yes | Yes |
+| WhatsApp | — | — | Yes | Yes |
+| Voice/IVR | — | — | Yes | Yes |
+| Custom integration | — | — | — | Yes |
+| Price | Free | $29/mo | $99/mo | $299/mo |
+
+Free tier is forever free for community health clinics in developing countries. Apply for a grant-funded upgrade.
 
 ### Supported Channels
 
@@ -304,21 +322,25 @@ MeshCue Connect is the patient communication layer — it closes the loop betwee
 
 | Tool | Description |
 |------|-------------|
+| `meshcue-clinic-register` | Register a new clinic with name, location, and language |
+| `meshcue-clinic-setup-sms` | Configure a clinic's SMS provider (Africa's Talking or Twilio) |
+| `meshcue-clinic-setup-whatsapp` | Configure a clinic's WhatsApp Business API credentials |
+| `meshcue-clinic-setup-voice` | Configure a clinic's Voice/IVR provider |
+| `meshcue-clinic-test-channel` | Send a test message through a clinic's configured channel |
+| `meshcue-clinic-dashboard` | View clinic stats: patients, devices, messages, channel health |
 | `meshcue-connect-alert` | Send a critical alert to patient + family + nurse based on device reading |
 | `meshcue-connect-send` | Send a message to a specific phone number via any channel |
-| `meshcue-connect-register` | Register a patient with phone, language, emergency contacts, and consent |
-| `meshcue-connect-inbox` | Retrieve incoming messages (symptoms, replies, opt-outs) |
+| `meshcue-connect-register` | Register a patient under a clinic with phone, language, emergency contacts, and consent |
+| `meshcue-connect-inbox` | Retrieve incoming messages for a clinic (symptoms, replies, opt-outs) |
 
 ### Configuration
 
-All Connect environment variables are documented in [`.env.example`](.env.example). Key variables:
+Platform-level environment variables are documented in [`.env.example`](.env.example). Individual clinics configure their own API keys via MCP tools — no environment variables needed per clinic.
 
-- `MESHCUE_AT_API_KEY` / `MESHCUE_AT_USERNAME` — Africa's Talking credentials
-- `MESHCUE_WA_TOKEN` / `MESHCUE_WA_PHONE_ID` — WhatsApp Business API
-- `MESHCUE_VOICE_PROVIDER` — `"africastalking"` or `"twilio"`
-- `MESHCUE_DEFAULT_CHANNEL` — Default delivery channel (`sms`, `whatsapp`, `voice`)
-- `MESHCUE_DEFAULT_LANGUAGE` — Default language code (`en`, `fr`, `sw`, `rw`, `ln`, `rn`, `pt`, `ar`, `es`)
-- `MESHCUE_ESCALATION_PHONE` — Fallback phone number for critical alerts when primary contacts fail
+- `MESHCUE_DEFAULT_CHANNEL` — Platform default delivery channel (`sms`, `whatsapp`, `voice`)
+- `MESHCUE_DEFAULT_LANGUAGE` — Platform default language code (`en`, `fr`, `sw`, `rw`, `ln`, `rn`, `pt`, `ar`, `es`)
+- `MESHCUE_MAX_RETRIES` — Number of delivery retries before escalation
+- `MESHCUE_ESCALATION_PHONE` — Platform-level fallback phone number for critical alerts when all clinic contacts fail
 
 ## Known Limitations
 

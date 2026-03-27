@@ -22,9 +22,12 @@ import type {
   Priority,
   ChannelProvider,
   Direction,
+  Clinic,
+  ClinicChannelConfig,
 } from "./types.js";
 import { renderTemplate } from "./templates.js";
 import { ConsentManager } from "./consent.js";
+import type { ConnectStore } from "./store.js";
 
 // ─── Keyword Patterns ────────────────────────────────────────
 
@@ -152,29 +155,44 @@ export async function handleIncoming(
 
 // ─── Router Factory ──────────────────────────────────────────
 
-export function createRouter(config: ConnectConfig): MessageRouter {
-  return new MessageRouter(config);
+export function createRouter(config: ConnectConfig, store?: ConnectStore): MessageRouter {
+  return new MessageRouter(config, store);
 }
 
 // ─── Message Router Class ────────────────────────────────────
 
 export class MessageRouter {
   private config: ConnectConfig;
+  private store: ConnectStore | undefined;
   private providers: Map<Channel, ChannelProvider> = new Map();
+  private clinicProviders: Map<string, Map<Channel, ChannelProvider>> = new Map();
   private offlineQueue: ConnectMessage[] = [];
   private consent: ConsentManager;
 
-  constructor(config: ConnectConfig) {
+  constructor(config: ConnectConfig, store?: ConnectStore) {
     this.config = config;
+    this.store = store;
     this.consent = new ConsentManager();
     this.consent.setSendFunction((msg) => this.send(msg));
   }
 
   /**
-   * Register a channel provider (SMS, WhatsApp, voice, etc.)
+   * Register a global channel provider (fallback when clinic has no provider).
    */
   registerProvider(provider: ChannelProvider): void {
     this.providers.set(provider.channel, provider);
+  }
+
+  /**
+   * Register a channel provider scoped to a specific clinic.
+   */
+  registerClinicProvider(clinicId: string, provider: ChannelProvider): void {
+    let map = this.clinicProviders.get(clinicId);
+    if (!map) {
+      map = new Map();
+      this.clinicProviders.set(clinicId, map);
+    }
+    map.set(provider.channel, provider);
   }
 
   /**
@@ -184,11 +202,58 @@ export class MessageRouter {
     return this.consent;
   }
 
+  /**
+   * Get the underlying store, if any.
+   */
+  getStore(): ConnectStore | undefined {
+    return this.store;
+  }
+
+  // ─── Clinic Config Resolution ─────────────────────────────
+
+  /**
+   * Converts a clinic's ClinicChannelConfig into the legacy ConnectConfig
+   * format that channel providers expect.
+   */
+  getClinicConfig(clinicId: string): ConnectConfig {
+    const clinic = this.store?.getClinic(clinicId);
+    if (!clinic) {
+      // Fall back to global config if clinic not found
+      return this.config;
+    }
+
+    const ch = clinic.channels;
+    return {
+      // SMS / Africa's Talking / Twilio
+      atApiKey: ch.sms?.provider === "africastalking" ? ch.sms.apiKey : undefined,
+      atUsername: ch.sms?.username,
+      atShortCode: ch.sms?.shortCode,
+
+      // WhatsApp Business
+      whatsappToken: ch.whatsapp?.token,
+      whatsappPhoneId: ch.whatsapp?.phoneId,
+
+      // Voice/IVR
+      voiceProvider: ch.voice?.provider,
+      twilioSid: ch.voice?.sid ?? ch.sms?.apiSecret,
+      twilioToken: ch.voice?.token,
+      twilioPhone: ch.voice?.phone,
+
+      // Defaults
+      defaultChannel: this.config.defaultChannel,
+      defaultLanguage: clinic.language,
+      maxRetries: this.config.maxRetries,
+      retryDelayMs: this.config.retryDelayMs,
+      criticalEscalationPhone: clinic.emergencyPhone ?? clinic.adminPhone,
+    };
+  }
+
   // ─── Core Routing ────────────────────────────────────────
 
   /**
    * Takes a device alert, triages it, and creates/sends messages
    * for all relevant recipients based on triage rules.
+   * Uses the clinic's own credentials for channel delivery.
    */
   async route(
     alert: DeviceAlert,
@@ -196,7 +261,10 @@ export class MessageRouter {
   ): Promise<ConnectMessage[]> {
     const triageResult = this.triage(alert);
     const messages: ConnectMessage[] = [];
-    const nursePhone = this.config.criticalEscalationPhone ?? patient.clinicId;
+
+    // Resolve config from clinic-owned credentials
+    const clinicConfig = this.getClinicConfig(patient.clinicId);
+    const nursePhone = clinicConfig.criticalEscalationPhone ?? patient.clinicId;
 
     for (const action of triageResult.actions) {
       const msgs = buildMessagesForAction(
@@ -251,10 +319,18 @@ export class MessageRouter {
 
   /**
    * Sends a message via the appropriate channel provider.
+   * Resolves provider from clinic-scoped providers first, then global fallback.
    */
   async send(message: ConnectMessage): Promise<ConnectMessage> {
+    // Try clinic-scoped provider first, then global
+    const clinicProviderMap = message.clinicId
+      ? this.clinicProviders.get(message.clinicId)
+      : undefined;
+
     const provider =
+      clinicProviderMap?.get(message.channel) ??
       this.providers.get(message.channel) ??
+      clinicProviderMap?.get(this.config.defaultChannel) ??
       this.providers.get(this.config.defaultChannel);
 
     if (!provider) {
@@ -276,6 +352,10 @@ export class MessageRouter {
       const result = await provider.send(message.to, message.body);
       message.status = result.status === "sent" ? "sent" : "delivered";
       message.sentAt = new Date().toISOString();
+
+      // Persist to store
+      this.store?.storeMessage(message);
+
       return message;
     } catch (err: unknown) {
       message.retryCount++;
@@ -288,6 +368,7 @@ export class MessageRouter {
       } else {
         message.status = "failed";
         message.failReason = `Max retries exceeded: ${errorMsg}`;
+        this.store?.storeMessage(message);
       }
 
       return message;
@@ -295,21 +376,29 @@ export class MessageRouter {
   }
 
   /**
-   * Adds a message to the offline queue.
+   * Adds a message to the offline queue (and to the store queue if available).
    */
   queueMessage(message: ConnectMessage): void {
     message.status = "queued";
     this.offlineQueue.push(message);
+    this.store?.enqueue(message);
   }
 
   /**
-   * Flushes all queued messages. Called when connectivity is restored.
+   * Flushes all queued messages, optionally filtered by clinic.
+   * Called when connectivity is restored.
    */
-  async flushQueue(): Promise<ConnectMessage[]> {
-    const queued = [...this.offlineQueue];
-    this.offlineQueue = [];
-    const results: ConnectMessage[] = [];
+  async flushQueue(clinicId?: string): Promise<ConnectMessage[]> {
+    let queued: ConnectMessage[];
+    if (clinicId) {
+      queued = this.offlineQueue.filter((m) => m.clinicId === clinicId);
+      this.offlineQueue = this.offlineQueue.filter((m) => m.clinicId !== clinicId);
+    } else {
+      queued = [...this.offlineQueue];
+      this.offlineQueue = [];
+    }
 
+    const results: ConnectMessage[] = [];
     for (const message of queued) {
       try {
         const sent = await this.send(message);
@@ -324,9 +413,12 @@ export class MessageRouter {
   }
 
   /**
-   * Returns the current offline queue length.
+   * Returns the current offline queue length, optionally filtered by clinic.
    */
-  getQueueLength(): number {
+  getQueueLength(clinicId?: string): number {
+    if (clinicId) {
+      return this.offlineQueue.filter((m) => m.clinicId === clinicId).length;
+    }
     return this.offlineQueue.length;
   }
 
@@ -334,23 +426,30 @@ export class MessageRouter {
 
   /**
    * Processes an incoming patient message. Detects keywords and
-   * routes to the appropriate handler.
+   * routes to the appropriate handler. Resolves clinic from patient lookup.
    */
   async handleIncoming(
     channel: Channel,
     from: string,
-    body: string
+    body: string,
+    clinicId?: string
   ): Promise<ConnectMessage> {
+    // Resolve clinic config for this incoming message
+    const resolvedClinicId = clinicId ?? this.resolveClinicFromPhone(from);
+    const effectiveConfig = resolvedClinicId
+      ? this.getClinicConfig(resolvedClinicId)
+      : this.config;
+
     const normalized = body.trim().toUpperCase();
     const matchedRule = matchKeyword(normalized);
 
     if (!matchedRule) {
-      return this.buildIncomingResponse(channel, from, "routine", "follow_up", {});
+      return this.buildIncomingResponse(channel, from, "routine", "follow_up", {}, effectiveConfig, resolvedClinicId);
     }
 
     if (matchedRule.category === "optout") {
       this.consent.revokeConsent(from);
-      return this.buildIncomingResponse(channel, from, "info", "opt_out_confirm", {});
+      return this.buildIncomingResponse(channel, from, "info", "opt_out_confirm", {}, effectiveConfig, resolvedClinicId);
     }
 
     if (matchedRule.category === "emergency") {
@@ -359,25 +458,28 @@ export class MessageRouter {
         from,
         "critical",
         matchedRule.template,
-        {}
+        {},
+        effectiveConfig,
+        resolvedClinicId
       );
 
-      if (this.config.criticalEscalationPhone) {
+      if (effectiveConfig.criticalEscalationPhone) {
         const nurseAlert: ConnectMessage = {
           id: generateId(),
+          clinicId: resolvedClinicId ?? "",
           direction: "patient_to_clinic",
           channel: "sms",
           priority: "critical",
           from,
-          to: this.config.criticalEscalationPhone,
+          to: effectiveConfig.criticalEscalationPhone,
           template: "spo2_critical",
           templateData: { name: from, value: "HELP", clinic: "nearest clinic" },
-          language: this.config.defaultLanguage,
+          language: effectiveConfig.defaultLanguage,
           body: `EMERGENCY from ${from}: "${body}"`,
           status: "queued",
           createdAt: new Date().toISOString(),
           retryCount: 0,
-          maxRetries: this.config.maxRetries,
+          maxRetries: effectiveConfig.maxRetries,
         };
         this.send(nurseAlert).catch(() => this.queueMessage(nurseAlert));
       }
@@ -390,18 +492,30 @@ export class MessageRouter {
       from,
       matchedRule.priority,
       matchedRule.template,
-      {}
+      {},
+      effectiveConfig,
+      resolvedClinicId
     );
   }
 
   // ─── Private Helpers ─────────────────────────────────────
+
+  /**
+   * Attempts to resolve a clinic ID from a patient's phone number via the store.
+   */
+  private resolveClinicFromPhone(phone: string): string | undefined {
+    const patient = this.store?.getPatientByPhone(phone);
+    return patient?.clinicId;
+  }
 
   private buildIncomingResponse(
     channel: Channel,
     from: string,
     priority: Priority,
     template: string,
-    extraData: Record<string, string | number>
+    extraData: Record<string, string | number>,
+    effectiveConfig: ConnectConfig,
+    clinicId?: string
   ): ConnectMessage {
     const templateData: Record<string, string | number> = {
       name: from,
@@ -410,27 +524,31 @@ export class MessageRouter {
 
     let body: string;
     try {
-      body = renderTemplate(template, templateData, this.config.defaultLanguage);
+      body = renderTemplate(template, templateData, effectiveConfig.defaultLanguage);
     } catch {
       body = `Message received from ${from}. A health worker will respond.`;
     }
 
-    return {
+    const msg: ConnectMessage = {
       id: generateId(),
+      clinicId: clinicId ?? "",
       direction: "clinic_to_patient",
       channel,
       priority,
-      from: this.config.atShortCode ?? "MESHCUE",
+      from: effectiveConfig.atShortCode ?? "MESHCUE",
       to: from,
       template,
       templateData,
-      language: this.config.defaultLanguage,
+      language: effectiveConfig.defaultLanguage,
       body,
       status: "queued",
       createdAt: new Date().toISOString(),
       retryCount: 0,
-      maxRetries: this.config.maxRetries,
+      maxRetries: effectiveConfig.maxRetries,
     };
+
+    this.store?.storeMessage(msg);
+    return msg;
   }
 }
 
@@ -616,6 +734,7 @@ function buildMessagesForAction(
         if (!consent.canSendMessage(patient, priority)) break;
       }
       messages.push(createMsg(
+        alert.clinicId,
         "clinic_to_patient",
         action.channel,
         priority,
@@ -640,6 +759,7 @@ function buildMessagesForAction(
           if (!contact.notifyOnRoutine) continue;
         }
         messages.push(createMsg(
+          alert.clinicId,
           "patient_to_family",
           action.channel,
           priority,
@@ -657,6 +777,7 @@ function buildMessagesForAction(
     case "nurse":
     case "supervisor": {
       messages.push(createMsg(
+        alert.clinicId,
         "system_alert",
         action.channel,
         priority,
@@ -673,6 +794,7 @@ function buildMessagesForAction(
     case "chw": {
       const chwPhone = patient.chwId ?? nursePhone;
       messages.push(createMsg(
+        alert.clinicId,
         "chw_to_supervisor",
         action.channel,
         priority,
@@ -688,6 +810,7 @@ function buildMessagesForAction(
 
     default: {
       messages.push(createMsg(
+        alert.clinicId,
         "clinic_to_patient",
         action.channel,
         priority,
@@ -708,6 +831,7 @@ function buildMessagesForAction(
  * Creates a ConnectMessage with standard defaults.
  */
 function createMsg(
+  clinicId: string,
   direction: Direction,
   channel: Channel,
   priority: Priority,
@@ -727,6 +851,7 @@ function createMsg(
 
   return {
     id: generateId(),
+    clinicId,
     direction,
     channel,
     priority,

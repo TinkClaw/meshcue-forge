@@ -74,6 +74,7 @@ export class ConsentManager {
 
     const message: ConnectMessage = {
       id: generateId(),
+      clinicId: patient.clinicId,
       direction: "clinic_to_patient",
       channel: patient.preferredChannel,
       priority: "routine",

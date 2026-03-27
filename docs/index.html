@@ -523,6 +523,84 @@
       .connect-stat { min-width: 140px; }
     }
 
+    /* ── Clinics Section ──────────────────── */
+    .clinics-section { padding: 80px 0 60px; }
+    .onboarding-steps {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+      margin-top: 40px;
+    }
+    .onboard-step {
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border); border-radius: 20px;
+      padding: 28px 24px; transition: all 0.3s var(--spring);
+      position: relative;
+    }
+    .onboard-step:hover { border-color: rgba(74,222,128,0.25); transform: translateY(-3px); }
+    .onboard-step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      color: var(--bg); font-size: 15px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 14px;
+    }
+    .onboard-step h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .onboard-step p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+    @media (max-width: 768px) {
+      .onboarding-steps { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .onboarding-steps { grid-template-columns: 1fr; }
+    }
+
+    /* ── Pricing Section ─────────────────── */
+    .pricing-section { padding: 0 0 80px; }
+    .pricing-table-wrap {
+      background: var(--glass); backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border); border-radius: 20px;
+      overflow: hidden; margin-top: 40px;
+    }
+    .pricing-table {
+      width: 100%; border-collapse: collapse;
+    }
+    .pricing-table th {
+      text-align: left; padding: 16px 20px; font-size: 13px;
+      font-weight: 700; color: var(--text-dim);
+      border-bottom: 1px solid var(--glass-border);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .pricing-table th:first-child { width: 180px; }
+    .pricing-table td {
+      padding: 12px 20px; font-size: 14px; color: var(--text-muted);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .pricing-table tr:last-child td { border-bottom: none; }
+    .pricing-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .pricing-table .col-free {
+      background: rgba(74,222,128,0.04);
+    }
+    .pricing-table th.col-free {
+      background: rgba(74,222,128,0.08);
+      color: var(--green);
+    }
+    .pricing-table .price-row td {
+      font-size: 18px; font-weight: 700; padding-top: 18px; padding-bottom: 18px;
+    }
+    .pricing-table .price-row .col-free {
+      background: rgba(74,222,128,0.1);
+      color: var(--green);
+    }
+    .pricing-check { color: var(--green); font-weight: 700; }
+    .pricing-dash { color: var(--text-dim); }
+    .pricing-note {
+      text-align: center; margin-top: 20px; font-size: 14px;
+      color: var(--text-muted); line-height: 1.7;
+    }
+    .pricing-note strong { color: var(--green); font-weight: 600; }
+    @media (max-width: 768px) {
+      .pricing-table-wrap { overflow-x: auto; }
+      .pricing-table { min-width: 600px; }
+    }
+
     /* ── Footer ────────────────────────────── */
     footer {
       padding: 40px 0; border-top: 1px solid var(--glass-border);
@@ -559,6 +637,7 @@
     <div class="nav-links">
       <a href="#healthcare">Healthcare</a>
       <a href="#connect">Connect</a>
+      <a href="#clinics">For Clinics</a>
       <a href="#features">Features</a>
       <a href="https://github.com/TinkClaw/meshcue-forge" class="btn-nav">GitHub</a>
       <a href="#forgeBox" class="btn-nav" style="background:linear-gradient(135deg,var(--orange),var(--fuchsia));">Start Forging</a>
@@ -679,6 +758,125 @@
         <span class="stat-label">Full communication loop</span>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- For Clinics -->
+<section class="clinics-section" id="clinics">
+  <div class="container">
+    <div class="section-label" style="background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">For Clinics</div>
+    <div class="section-title">Your Clinic. Your Number. Your Patients.</div>
+    <div class="section-sub" style="max-width:640px;">MeshCue is the platform &mdash; clinics own their communication channels, patient data, and phone numbers. Set up in 5 minutes.</div>
+    <div class="onboarding-steps">
+      <div class="onboard-step">
+        <div class="onboard-step-num">1</div>
+        <h3>Register your clinic</h3>
+        <p>Name, location, language. One MCP tool call and your clinic exists on the platform.</p>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-step-num">2</div>
+        <h3>Connect your SMS</h3>
+        <p>Enter your Africa&rsquo;s Talking or Twilio credentials. Your phone number, your short code.</p>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-step-num">3</div>
+        <h3>Register patients</h3>
+        <p>Add patients with consent, emergency contacts, and preferred language. Data stays under your control.</p>
+      </div>
+      <div class="onboard-step">
+        <div class="onboard-step-num">4</div>
+        <h3>Devices auto-alert</h3>
+        <p>Forge-built devices send readings through your channels. Alerts flow to patients and families automatically.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section class="pricing-section" id="pricing">
+  <div class="container">
+    <div class="section-label" style="background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Pricing</div>
+    <div class="section-title">Simple, transparent pricing</div>
+    <div class="section-sub" style="max-width:480px;">Start free. Scale when you need to. No surprises.</div>
+    <div class="pricing-table-wrap">
+      <table class="pricing-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="col-free">Free</th>
+            <th>Basic</th>
+            <th>Professional</th>
+            <th>Enterprise</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Patients</td>
+            <td class="col-free">50</td>
+            <td>500</td>
+            <td>2,000</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td>Devices</td>
+            <td class="col-free">5</td>
+            <td>50</td>
+            <td>200</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td>Messages/month</td>
+            <td class="col-free">500</td>
+            <td>5,000</td>
+            <td>20,000</td>
+            <td>Unlimited</td>
+          </tr>
+          <tr>
+            <td>SMS</td>
+            <td class="col-free"><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+          </tr>
+          <tr>
+            <td>USSD</td>
+            <td class="col-free"><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+          </tr>
+          <tr>
+            <td>WhatsApp</td>
+            <td class="col-free"><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+          </tr>
+          <tr>
+            <td>Voice / IVR</td>
+            <td class="col-free"><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+          </tr>
+          <tr>
+            <td>Custom integration</td>
+            <td class="col-free"><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-dash">&mdash;</span></td>
+            <td><span class="pricing-check">&#10003;</span></td>
+          </tr>
+          <tr class="price-row">
+            <td>Price</td>
+            <td class="col-free">Free</td>
+            <td>$29/mo</td>
+            <td>$99/mo</td>
+            <td>$299/mo</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="pricing-note"><strong>Free tier is forever free</strong> for community health clinics in developing countries. Apply for a grant-funded upgrade.</p>
   </div>
 </section>
 
